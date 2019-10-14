@@ -1,7 +1,11 @@
 ##Arrival & persistence analysis for priority effects review
 ##Reena Debray
 
-##data files to import: OTU tables ("otu"), taxonomic annotations ("SILVA taxonomy"), trait annotations ("predicted_trait_data")
+##import data files: OTU tables ("otu"), taxonomic annotations ("SILVA taxonomy"), trait annotations ("predicted_trait_data")
+otus <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/otus.csv")
+SILVA_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/SILVA_taxonomy.csv")
+predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/predicted_trait_data.csv")
+
 
 #Make a list of OTUs that have predicted traits & are seen in 5 or more subjects
 OTU_list<-c()
@@ -84,4 +88,9 @@ summary_all_OTUs$persistence_group<-factor(summary_all_OTUs$persistence_group,le
 summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_all_OTUs$arrival_persistence_pvalue<0.05 & summary_all_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
 summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_all_OTUs$arrival_persistence_pvalue<0.05 & summary_all_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
 summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_all_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
+
+#plot time-dependent colonizers by phylum and class
+ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Phylum))+geom_bar()+theme_bw()+xlab("")+scale_fill_brewer(palette="Set1")
+colourCount = length(unique(summary_all_OTUs$Class))
+ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Class))+geom_bar()+theme_bw()+xlab("")+scale_fill_manual(values = getPalette(colourCount))
 
