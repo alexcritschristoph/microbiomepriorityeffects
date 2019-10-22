@@ -7,7 +7,7 @@ SILVA_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorit
 predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/predicted_trait_data.csv")
 
 
-#Make a list of OTUs that have predicted traits & are seen in 5 or more subjects
+##Make a list of OTUs that have predicted traits & are seen in 5 or more subjects
 OTU_list<-c()
 for (OTU in predicted_trait_data$otu){
   OTU_all_samples<-otus[,c("subject",OTU)]
@@ -19,7 +19,7 @@ for (OTU in predicted_trait_data$otu){
   
 }
 
-#Persistence analysis
+##Persistence analysis
 indiv_OTU_data<-vector("list",length(OTU_list))
 i=1
 summary_all_OTUs<-data.frame(matrix(nrow=0,ncol=25))
@@ -68,6 +68,7 @@ for (OTU in OTU_list){
   i=i+1
 }
 
+##summary statistics
 #identify early arrivers (1st quartile), late arrivers (4th quartile)
 arrival_first_quartile<-summary(summary_all_OTUs$mean_arrival)[2]
 arrival_fourth_quartile<-summary(summary_all_OTUs$mean_arrival)[5]
@@ -93,4 +94,78 @@ summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_a
 ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Phylum))+geom_bar()+theme_bw()+xlab("")+scale_fill_brewer(palette="Set1")
 colourCount = length(unique(summary_all_OTUs$Class))
 ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Class))+geom_bar()+theme_bw()+xlab("")+scale_fill_manual(values = getPalette(colourCount))
+
+
+##Pairwise analysis
+#start with the OTUs that do better if they arrive early, and determine all possible pairs
+#NOTE that this list does not take multiple testing into account
+prefer_early<-as.character(summary_all_OTUs[!is.na(summary_all_OTUs$priority_effects) & summary_all_OTUs$priority_effects=="Prefers early arrival","OTU"]) #names of OTUs in the prefer-early-arrival group
+prefer_early_pairs<-combn(prefer_early,2) #all possible pairs of early-preferring OTUs
+
+#for each pair of OTUs, test whether the relative order of arrival is a BETTER predictor than chronological time.
+
+summary_all_pairs<-data.frame(matrix(nrow=0,ncol=17))
+for (i in seq(1,ncol(prefer_early_pairs))){
+  OTU_A<-prefer_early_pairs[,i][1]
+  OTU_B<-prefer_early_pairs[,i][2]
+  
+  data_per_pair<-data.frame(matrix(nrow=0,ncol=5))
+  
+  #loop through subjects
+  #in each subject, determine which OTU arrived first
+  for (subjectID in levels(factor(otus$subject))){
+    
+    #subset the data to abundances of two focal OTUS in one subject over time
+    otus_subset<-cbind(otus[otus$subject==subjectID,1:4],otus[otus$subject==subjectID,OTU_A],otus[otus$subject==subjectID,OTU_B])
+    otus_subset$t<-as.numeric(otus_subset$t)
+    otus_subset<-otus_subset[order(otus_subset$t),]
+    colnames(otus_subset)=c("X1","sampleID","subject","t","OTU_A","OTU_B")
+    
+    #check that both OTUs appear at least once before the last sample -- otherwise, skip this subject
+    if (!identical(otus_subset[-c(nrow(otus_subset)),"OTU_A"],rep(0,nrow(otus_subset)-1)) & !identical(otus_subset[-c(nrow(otus_subset)),"OTU_B"],rep(0,nrow(otus_subset)-1))){
+      
+      #calculate arrival time & persistence of A
+      row=1
+      while (otus_subset[row,"OTU_A"]==0){row=row+1}
+      arrival_time_A<-otus_subset[row,"t"]
+      post_arrival_A<-otus_subset[otus_subset$t>arrival_time_A,"OTU_A"] #relative abundance of A after it arrives
+      persistence_A<-length(post_arrival_A[post_arrival_A!=0])/length(post_arrival_A) #proportion of samples in which this OTU occurs after arrival
+      
+      #calculate arrival time & persistence of B
+      row=1
+      while (otus_subset[row,"OTU_B"]==0){row=row+1}
+      arrival_time_B<-otus_subset[row,"t"]
+      post_arrival_B<-otus_subset[otus_subset$t>arrival_time_B,"OTU_B"] #relative abundance of B after both arrive
+      persistence_B<-length(post_arrival_B[post_arrival_B!=0])/length(post_arrival_B) #proportion of samples in which this OTU occurs after arrival
+
+      if (arrival_time_A<arrival_time_B){first_arriver="A"}
+      if (arrival_time_B<arrival_time_A){first_arriver="B"}
+      if (arrival_time_A==arrival_time_B){first_arriver="Tie"}
+
+      data_per_pair<-rbind(data_per_pair,data.frame(arrival_time_A,arrival_time_B,first_arriver,persistence_A,persistence_B))
+    }
+  }
+  #check whether we have a roughly similar distribution of arrival times between the two OTUs. If one always arrives first, then we can't look for priority effects.
+  if (nrow(data_per_pair)>=5 & nrow(data_per_pair[data_per_pair$first_arriver=="A",])/nrow(data_per_pair)<0.75 & nrow(data_per_pair[data_per_pair$first_arriver=="B",])/nrow(data_per_pair)<0.75){
+      chrono_AIC_A<-AIC(lm(persistence_A~arrival_time_A,data_per_pair)) #how well does chronological time explain the persistence of A?
+      order_AIC_A<-AIC(lm(persistence_A~first_arriver,data_per_pair)) #how well does arriving before B explain the persistence of A?
+      order_directionality_A<-mean(data_per_pair[data_per_pair$first_arriver=="A","persistence_A"])-mean(data_per_pair[data_per_pair$first_arriver!="A","persistence_A"]) #how to handle ties here??
+      chrono_AIC_B<-AIC(lm(persistence_B~arrival_time_B,data_per_pair)) #how well does chronological time explain the persistence of B?
+      order_AIC_B<-AIC(lm(persistence_B~first_arriver,data_per_pair)) #how well does arriving before A explain the persistence of B?
+      order_directionality_B<-mean(data_per_pair[data_per_pair$first_arriver=="B","persistence_B"])-mean(data_per_pair[data_per_pair$first_arriver!="B","persistence_B"]) #how to handle ties here??
+      
+      co_occurrence<-nrow(data_per_pair)
+      
+      SILVA_A<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_A,8:13]
+      SILVA_B<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_B,8:13]
+
+      
+      summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_AIC_A,order_AIC_A,order_directionality_A,chrono_AIC_B,order_AIC_B,order_directionality_B,co_occurrence,SILVA_A,SILVA_B))
+  }
+}
+
+
+
+
+
 
