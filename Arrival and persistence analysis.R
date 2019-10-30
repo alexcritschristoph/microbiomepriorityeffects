@@ -1,6 +1,13 @@
 ##Arrival & persistence analysis for priority effects review
 ##Reena Debray
 
+##import libraries
+library(ggplot2)
+library(readr)
+library(RColorBrewer)
+library(gridExtra)
+getPalette=colorRampPalette(brewer.pal(9,"Set1"))
+
 ##import data files: OTU tables ("otu"), taxonomic annotations ("SILVA taxonomy"), trait annotations ("predicted_trait_data")
 otus <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/otus.csv")
 SILVA_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/SILVA_taxonomy.csv")
@@ -138,15 +145,13 @@ for (i in seq(1,ncol(prefer_early_pairs))){
       post_arrival_B<-otus_subset[otus_subset$t>arrival_time_B,"OTU_B"] #relative abundance of B after both arrive
       persistence_B<-length(post_arrival_B[post_arrival_B!=0])/length(post_arrival_B) #proportion of samples in which this OTU occurs after arrival
 
-      if (arrival_time_A<arrival_time_B){first_arriver="A"}
-      if (arrival_time_B<arrival_time_A){first_arriver="B"}
-      if (arrival_time_A==arrival_time_B){first_arriver="Tie"}
-
-      data_per_pair<-rbind(data_per_pair,data.frame(arrival_time_A,arrival_time_B,first_arriver,persistence_A,persistence_B))
+      arrival_difference<-arrival_time_A-arrival_time_B #if A arrives first, this is negative
+      
+      data_per_pair<-rbind(data_per_pair,data.frame(arrival_time_A,arrival_time_B,arrival_difference,persistence_A,persistence_B))
     }
   }
   #check whether we have a roughly similar distribution of arrival times between the two OTUs. If one always arrives first, then we can't look for priority effects.
-  if (nrow(data_per_pair)>=5 & nrow(data_per_pair[data_per_pair$first_arriver=="A",])/nrow(data_per_pair)<0.75 & nrow(data_per_pair[data_per_pair$first_arriver=="B",])/nrow(data_per_pair)<0.75){
+  if (nrow(data_per_pair)>=5 & nrow(data_per_pair[data_per_pair$arrival_difference<=0,])/nrow(data_per_pair)<0.75 & nrow(data_per_pair[data_per_pair$arrival_difference>=0,])/nrow(data_per_pair)<0.75){
       chrono_R2_A<-summary(lm(persistence_A~arrival_time_A,data_per_pair))$r.squared #how well does chronological time explain the persistence of A?
       order_R2_A<-summary(lm(persistence_A~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of A?
       order_directionality_A<-summary(lm(persistence_A~arrival_difference,data_per_pair))$coef[2,1] #if there is a NEGATIVE relationship, that means A persists better when it arrives before B
@@ -155,13 +160,13 @@ for (i in seq(1,ncol(prefer_early_pairs))){
       chrono_R2_B<-summary(lm(persistence_B~arrival_time_B,data_per_pair))$r.squared #how well does chronological time explain the persistence of B?
       order_R2_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of B?
       order_directionality_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$coef[2,1] #if there is a POSITIVE relationship, that means B persists better when it arrives before A
-  
+     
       co_occurrence<-nrow(data_per_pair)
       
-    #add taxonomy information
       SILVA_A<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_A,8:11]
       SILVA_B<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_B,8:11]
 
+      
       summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_R2_A,order_R2_A,order_directionality_A,chrono_R2_B,order_R2_B,order_directionality_B,co_occurrence,SILVA_A,SILVA_B))
   }
 }
