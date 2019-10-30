@@ -56,8 +56,8 @@ for (OTU in OTU_list){
   #calculate summary statistics for each OTU across infants
   mean_arrival=mean(data_per_OTU$arrival_time)
   mean_persistence=mean(data_per_OTU$persistence,na.rm=T)
-  arrival_persistence_cor=cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="s")$estimate
-  arrival_persistence_pvalue=cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="s")$p.value
+  arrival_persistence_cor=cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
+  arrival_persistence_pvalue=cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
   
   #add taxonomy and trait data
   taxa<-SILVA_taxonomy[SILVA_taxonomy$otu==OTU,c(2,4:9)]
@@ -104,7 +104,7 @@ prefer_early_pairs<-combn(prefer_early,2) #all possible pairs of early-preferrin
 
 #for each pair of OTUs, test whether the relative order of arrival is a BETTER predictor than chronological time.
 
-summary_all_pairs<-data.frame(matrix(nrow=0,ncol=17))
+summary_all_pairs<-data.frame(matrix(nrow=0,ncol=16))
 for (i in seq(1,ncol(prefer_early_pairs))){
   OTU_A<-prefer_early_pairs[,i][1]
   OTU_B<-prefer_early_pairs[,i][2]
@@ -147,25 +147,47 @@ for (i in seq(1,ncol(prefer_early_pairs))){
   }
   #check whether we have a roughly similar distribution of arrival times between the two OTUs. If one always arrives first, then we can't look for priority effects.
   if (nrow(data_per_pair)>=5 & nrow(data_per_pair[data_per_pair$first_arriver=="A",])/nrow(data_per_pair)<0.75 & nrow(data_per_pair[data_per_pair$first_arriver=="B",])/nrow(data_per_pair)<0.75){
-      chrono_AIC_A<-AIC(lm(persistence_A~arrival_time_A,data_per_pair)) #how well does chronological time explain the persistence of A?
-      order_AIC_A<-AIC(lm(persistence_A~first_arriver,data_per_pair)) #how well does arriving before B explain the persistence of A?
-      order_directionality_A<-mean(data_per_pair[data_per_pair$first_arriver=="A","persistence_A"])-mean(data_per_pair[data_per_pair$first_arriver!="A","persistence_A"]) #how to handle ties here??
-      chrono_AIC_B<-AIC(lm(persistence_B~arrival_time_B,data_per_pair)) #how well does chronological time explain the persistence of B?
-      order_AIC_B<-AIC(lm(persistence_B~first_arriver,data_per_pair)) #how well does arriving before A explain the persistence of B?
-      order_directionality_B<-mean(data_per_pair[data_per_pair$first_arriver=="B","persistence_B"])-mean(data_per_pair[data_per_pair$first_arriver!="B","persistence_B"]) #how to handle ties here??
-      
+      chrono_R2_A<-summary(lm(persistence_A~arrival_time_A,data_per_pair))$r.squared #how well does chronological time explain the persistence of A?
+      order_R2_A<-summary(lm(persistence_A~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of A?
+      order_directionality_A<-summary(lm(persistence_A~arrival_difference,data_per_pair))$coef[2,1] #if there is a NEGATIVE relationship, that means A persists better when it arrives before B
+        
+        
+      chrono_R2_B<-summary(lm(persistence_B~arrival_time_B,data_per_pair))$r.squared #how well does chronological time explain the persistence of B?
+      order_R2_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of B?
+      order_directionality_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$coef[2,1] #if there is a POSITIVE relationship, that means B persists better when it arrives before A
+  
       co_occurrence<-nrow(data_per_pair)
       
-      SILVA_A<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_A,8:13]
-      SILVA_B<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_B,8:13]
+    #add taxonomy information
+      SILVA_A<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_A,8:11]
+      SILVA_B<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_B,8:11]
 
-      
-      summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_AIC_A,order_AIC_A,order_directionality_A,chrono_AIC_B,order_AIC_B,order_directionality_B,co_occurrence,SILVA_A,SILVA_B))
+      summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_R2_A,order_R2_A,order_directionality_A,chrono_R2_B,order_R2_B,order_directionality_B,co_occurrence,SILVA_A,SILVA_B))
   }
 }
 
+#using taxonomy information, determine whether the two OTUs are from the same or different groups
+summary_all_pairs$same_phylum<-summary_all_pairs$Phylum==summary_all_pairs$Phylum.1
+summary_all_pairs$same_class<-summary_all_pairs$Class==summary_all_pairs$Class.1
+summary_all_pairs$same_order<-summary_all_pairs$Order==summary_all_pairs$Order.1
+summary_all_pairs$same_family<-summary_all_pairs$Family==summary_all_pairs$Family.1
 
+ #a small number of pairs (17 out of 346) have the opposite relationship expected (generally very slightly); remove them
+summary_all_pairs<-summary_all_pairs[summary_all_pairs$order_directionality_A<0 & summary_all_pairs$order_directionality_B>0,]
 
+#bin OTU pairs according to whether chronological time is a better predictor of persistence than order for both of them ("Arrival time"), arrival order is better than chrono time for one of the two ("A or B"), and arrival order is better than chrono time for both OTUs ("Both A and B")
+summary_all_pairs_direction$preemption=rep(NA,173)
+summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A>summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B>summary_all_pairs_direction$chrono_R2_B,"preemption"]="Both A and B"
+summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A>summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B<=summary_all_pairs_direction$chrono_R2_B,"preemption"]="A or B"
+summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A<=summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B>summary_all_pairs_direction$chrono_R2_B,"preemption"]="A or B"
+summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A<=summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B<=summary_all_pairs_direction$chrono_R2_B,"preemption"]="Arrival time"
+summary_all_pairs_direction$preemption<-factor(summary_all_pairs_direction$preemption,levels=c("Arrival time","A or B","Both A and B"))
+
+#plot the strength of these pairwise relationships according to co-occurrence rates
+ggplot(summary_all_pairs_direction,aes(co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Co-occurrence (number of infants)")
+
+#plot the strength of these pairwise relationships according to taxonomic relatedness
+grid.arrange(ggplot(summary_all_pairs_direction,aes(preemption,fill=same_phylum))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""),ggplot(summary_all_pairs_direction,aes(preemption,fill=same_class))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""))
 
 
 
