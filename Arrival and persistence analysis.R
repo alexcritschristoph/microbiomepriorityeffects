@@ -181,18 +181,17 @@ summary_all_pairs$same_family<-summary_all_pairs$Family==summary_all_pairs$Famil
 summary_all_pairs<-summary_all_pairs[summary_all_pairs$order_directionality_A<0 & summary_all_pairs$order_directionality_B>0,]
 
 #bin OTU pairs according to whether chronological time is a better predictor of persistence than order for both of them ("Arrival time"), arrival order is better than chrono time for one of the two ("A or B"), and arrival order is better than chrono time for both OTUs ("Both A and B")
-summary_all_pairs_direction$preemption=rep(NA,173)
-summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A>summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B>summary_all_pairs_direction$chrono_R2_B,"preemption"]="Both A and B"
-summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A>summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B<=summary_all_pairs_direction$chrono_R2_B,"preemption"]="A or B"
-summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A<=summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B>summary_all_pairs_direction$chrono_R2_B,"preemption"]="A or B"
-summary_all_pairs_direction[summary_all_pairs_direction$order_R2_A<=summary_all_pairs_direction$chrono_R2_A & summary_all_pairs_direction$order_R2_B<=summary_all_pairs_direction$chrono_R2_B,"preemption"]="Arrival time"
-summary_all_pairs_direction$preemption<-factor(summary_all_pairs_direction$preemption,levels=c("Arrival time","A or B","Both A and B"))
+summary_all_pairs[summary_all_pairs$order_R2_A>summary_all_pairs$chrono_R2_A & summary_all_pairs$order_R2_B>summary_all_pairs$chrono_R2_B,"preemption"]="Both A and B"
+summary_all_pairs[summary_all_pairs$order_R2_A>summary_all_pairs$chrono_R2_A & summary_all_pairs$order_R2_B<=summary_all_pairs$chrono_R2_B,"preemption"]="A or B"
+summary_all_pairs[summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A & summary_all_pairs$order_R2_B>summary_all_pairs$chrono_R2_B,"preemption"]="A or B"
+summary_all_pairs[summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A & summary_all_pairs$order_R2_B<=summary_all_pairs$chrono_R2_B,"preemption"]="Arrival time"
+summary_all_pairs$preemption<-factor(summary_all_pairs$preemption,levels=c("Arrival time","A or B","Both A and B"))
 
 #plot the strength of these pairwise relationships according to co-occurrence rates
-ggplot(summary_all_pairs_direction,aes(co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Co-occurrence (number of infants)")
+ggplot(summary_all_pairs,aes(co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Co-occurrence (number of infants)")
 
 #plot the strength of these pairwise relationships according to taxonomic relatedness
-grid.arrange(ggplot(summary_all_pairs_direction,aes(preemption,fill=same_phylum))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""),ggplot(summary_all_pairs_direction,aes(preemption,fill=same_class))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""))
+grid.arrange(ggplot(summary_all_pairs,aes(preemption,fill=same_phylum))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""),ggplot(summary_all_pairs,aes(preemption,fill=same_class))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""))
 
 
 
