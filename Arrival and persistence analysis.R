@@ -27,13 +27,11 @@ for (OTU in predicted_trait_data$otu){
 }
 
 ##Persistence analysis
-indiv_OTU_data<-vector("list",length(OTU_list))
-i=1
-summary_all_OTUs<-data.frame(matrix(nrow=0,ncol=25))
+summary_all_OTUs<-data.frame(matrix(nrow=0,ncol=26)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
 
 for (OTU in OTU_list){
   
-  data_per_OTU<-data.frame(matrix(nrow=0,ncol=4))
+  data_per_OTU<-data.frame(matrix(nrow=0,ncol=4)) #initialize a new data frame for each OTU, to calculate the arrival time and persistence in each infant
   
   for (subjectID in levels(factor(otus$subject))){
     
@@ -46,13 +44,13 @@ for (OTU in OTU_list){
     colnames(otus_subset)=c("X1","sampleID","subject","t","relative_abundance")
     
     #calculate arrival time & persistence
-    if (!identical(otus_subset[,"relative_abundance"],rep(0,nrow(otus_subset)))){
+    if (!identical(otus_subset[,"relative_abundance"],rep(0,nrow(otus_subset)))){ #if this OTU never appeared in this subject, skip it
       row=1
       while (otus_subset[row,"relative_abundance"]==0){
         row=row+1
       }
-      arrival_time<-otus_subset[row,"t"] #first non-zero abundance
-      post_arrival<-otus_subset[otus_subset$t>arrival_time,"relative_abundance"] #relative abundances after arrival
+      arrival_time<-otus_subset[row,"t"]  #arrival time is the first sample with a non-zero abundance
+      post_arrival<-otus_subset[otus_subset$t>arrival_time,"relative_abundance"] #subset the data to the time points after arrival
       persistence<-length(post_arrival[post_arrival!=0])/length(post_arrival) #proportion of samples in which this OTU occurs after arrival
       
       data_per_OTU<-rbind(data_per_OTU,data.frame(OTU,subjectID,arrival_time,persistence))
@@ -65,14 +63,13 @@ for (OTU in OTU_list){
   mean_persistence=mean(data_per_OTU$persistence,na.rm=T)
   arrival_persistence_cor=cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
   arrival_persistence_pvalue=cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
+  num_infants=nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   
   #add taxonomy and trait data
   taxa<-SILVA_taxonomy[SILVA_taxonomy$otu==OTU,c(2,4:9)]
   traits<-predicted_trait_data[predicted_trait_data$otu==OTU,2:14]
   
-  summary_all_OTUs<-rbind(summary_all_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,taxa,traits))
-  indiv_OTU_data[i]=data_per_OTU
-  i=i+1
+    summary_all_OTUs<-rbind(summary_all_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_infants,taxa,traits))
 }
 
 ##summary statistics
@@ -111,12 +108,12 @@ prefer_early_pairs<-combn(prefer_early,2) #all possible pairs of early-preferrin
 
 #for each pair of OTUs, test whether the relative order of arrival is a BETTER predictor than chronological time.
 
-summary_all_pairs<-data.frame(matrix(nrow=0,ncol=16))
+summary_all_pairs<-data.frame(matrix(nrow=0,ncol=17))
 for (i in seq(1,ncol(prefer_early_pairs))){
   OTU_A<-prefer_early_pairs[,i][1]
   OTU_B<-prefer_early_pairs[,i][2]
   
-  data_per_pair<-data.frame(matrix(nrow=0,ncol=5))
+  data_per_pair<-data.frame(matrix(nrow=0,ncol=6))
   
   #loop through subjects
   #in each subject, determine which OTU arrived first
@@ -146,8 +143,10 @@ for (i in seq(1,ncol(prefer_early_pairs))){
       persistence_B<-length(post_arrival_B[post_arrival_B!=0])/length(post_arrival_B) #proportion of samples in which this OTU occurs after arrival
 
       arrival_difference<-arrival_time_A-arrival_time_B #if A arrives first, this is negative
+      co_occurrence<-nrow(otus_subset[otus_subset$OTU_A!=0 & otus_subset$OTU_B!=0,])/nrow(otus_subset[otus_subset$OTU_A!=0 | otus_subset$OTU_B!=0,]) #This is a measure of the average overlap between OTUs within infants. The value is lowest if they tend to colonize the same infants but do not coexist at the same time.
+    
       
-      data_per_pair<-rbind(data_per_pair,data.frame(arrival_time_A,arrival_time_B,arrival_difference,persistence_A,persistence_B))
+      data_per_pair<-rbind(data_per_pair,data.frame(arrival_time_A,arrival_time_B,arrival_difference,persistence_A,persistence_B,co_occurrence))
     }
   }
   #check whether we have a roughly similar distribution of arrival times between the two OTUs. If one always arrives first, then we can't look for priority effects.
@@ -161,13 +160,14 @@ for (i in seq(1,ncol(prefer_early_pairs))){
       order_R2_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of B?
       order_directionality_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$coef[2,1] #if there is a POSITIVE relationship, that means B persists better when it arrives before A
      
-      co_occurrence<-nrow(data_per_pair)
+      avg_co_occurrence<-mean(data_per_pair$co_occurrence) 
+      num_infants<-nrow(data_per_pair) #total number of infant samples where both are observed at least once
       
       SILVA_A<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_A,8:11]
       SILVA_B<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_B,8:11]
 
       
-      summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_R2_A,order_R2_A,order_directionality_A,chrono_R2_B,order_R2_B,order_directionality_B,co_occurrence,SILVA_A,SILVA_B))
+      summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_R2_A,order_R2_A,order_directionality_A,chrono_R2_B,order_R2_B,order_directionality_B,avg_co_occurrence,num_infants,SILVA_A,SILVA_B))
   }
 }
 
@@ -188,7 +188,7 @@ summary_all_pairs[summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A & 
 summary_all_pairs$preemption<-factor(summary_all_pairs$preemption,levels=c("Arrival time","A or B","Both A and B"))
 
 #plot the strength of these pairwise relationships according to co-occurrence rates
-ggplot(summary_all_pairs,aes(co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Co-occurrence (number of infants)")
+ggplot(summary_all_pairs,aes(avg_co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Co-occurrence (number of infants)")
 
 #plot the strength of these pairwise relationships according to taxonomic relatedness
 grid.arrange(ggplot(summary_all_pairs,aes(preemption,fill=same_phylum))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""),ggplot(summary_all_pairs,aes(preemption,fill=same_class))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""))
