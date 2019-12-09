@@ -72,33 +72,10 @@ for (OTU in OTU_list){
     summary_all_OTUs<-rbind(summary_all_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_infants,taxa,traits))
 }
 
-##summary statistics
-#identify early arrivers (1st quartile), late arrivers (4th quartile)
-arrival_first_quartile<-summary(summary_all_OTUs$mean_arrival)[2]
-arrival_fourth_quartile<-summary(summary_all_OTUs$mean_arrival)[5]
-summary_all_OTUs[summary_all_OTUs$mean_arrival<arrival_first_quartile,"arrival_group"]="early"
-summary_all_OTUs[summary_all_OTUs$mean_arrival>=arrival_first_quartile & summary_all_OTUs$mean_arrival<=arrival_fourth_quartile,"arrival_group"]="middle"
-summary_all_OTUs[summary_all_OTUs$mean_arrival>arrival_fourth_quartile,"arrival_group"]="late"
-summary_all_OTUs$arrival_group<-factor(summary_all_OTUs$arrival_group,levels=c("early","middle","late"))
-
-#identify poor persisters (1st quartile), good persisters (4th quartile)
-persistence_first_quartile<-summary(summary_all_OTUs$mean_persistence)[2]
-persistence_fourth_quartile<-summary(summary_all_OTUs$mean_persistence)[5]
-summary_all_OTUs[summary_all_OTUs$mean_persistence<persistence_first_quartile,"persistence_group"]="poor"
-summary_all_OTUs[summary_all_OTUs$mean_persistence>=persistence_first_quartile & summary_all_OTUs$mean_persistence<=persistence_fourth_quartile,"persistence_group"]="middle"
-summary_all_OTUs[summary_all_OTUs$mean_persistence>persistence_fourth_quartile,"persistence_group"]="good"
-summary_all_OTUs$persistence_group<-factor(summary_all_OTUs$persistence_group,levels=c("poor","middle","good"))
-
 #identify time-dependent colonizers
 summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_all_OTUs$arrival_persistence_pvalue<0.05 & summary_all_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
 summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_all_OTUs$arrival_persistence_pvalue<0.05 & summary_all_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
 summary_all_OTUs[!is.na(summary_all_OTUs$arrival_persistence_pvalue) & summary_all_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-
-#plot time-dependent colonizers by phylum and class
-ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Phylum))+geom_bar()+theme_bw()+xlab("")+scale_fill_brewer(palette="Set1")
-colourCount = length(unique(summary_all_OTUs$Class))
-ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Class))+geom_bar()+theme_bw()+xlab("")+scale_fill_manual(values = getPalette(colourCount))
-
 
 ##Pairwise analysis
 #start with the OTUs that do better if they arrive early, and determine all possible pairs
@@ -107,7 +84,6 @@ prefer_early<-as.character(summary_all_OTUs[!is.na(summary_all_OTUs$priority_eff
 prefer_early_pairs<-combn(prefer_early,2) #all possible pairs of early-preferring OTUs
 
 #for each pair of OTUs, test whether the relative order of arrival is a BETTER predictor than chronological time.
-
 summary_all_pairs<-data.frame(matrix(nrow=0,ncol=17))
 for (i in seq(1,ncol(prefer_early_pairs))){
   OTU_A<-prefer_early_pairs[,i][1]
@@ -179,22 +155,93 @@ summary_all_pairs$same_family<-summary_all_pairs$Family==summary_all_pairs$Famil
 
 #bin OTU pairs according to whether chronological time is a better predictor of persistence than order for both of them ("Arrival time"), arrival order is better than chrono time for one of the two ("A or B"), and arrival order is better than chrono time for both OTUs ("Both A and B")
 summary_all_pairs<-summary_all_pairs[!is.na(summary_all_pairs$order_R2_A & summary_all_pairs$order_R2_B),]
-
 summary_all_pairs[summary_all_pairs$order_R2_A>summary_all_pairs$chrono_R2_A & summary_all_pairs$order_directionality_A<0 & summary_all_pairs$order_R2_B>summary_all_pairs$chrono_R2_B & summary_all_pairs$order_directionality_B>0,"preemption"]="Both A and B"
-
 summary_all_pairs[(summary_all_pairs$order_R2_A>summary_all_pairs$chrono_R2_A & summary_all_pairs$order_directionality_A<0) & (summary_all_pairs$order_R2_B<=summary_all_pairs$chrono_R2_B | summary_all_pairs$order_directionality_B<0),"preemption"]="A or B"
-
 summary_all_pairs[(summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A | summary_all_pairs$order_directionality_A>0) & (summary_all_pairs$order_R2_B>summary_all_pairs$chrono_R2_B & summary_all_pairs$order_directionality_B>0),"preemption"]="A or B"
-
 summary_all_pairs[(summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A & summary_all_pairs$order_R2_B<=summary_all_pairs$chrono_R2_B) | (summary_all_pairs$order_directionality_A>0 | summary_all_pairs$order_directionality_B<0),"preemption"]="Arrival time"
-
 summary_all_pairs$preemption<-factor(summary_all_pairs$preemption,levels=c("Arrival time","A or B","Both A and B"))
 
-#plot the strength of these pairwise relationships according to co-occurrence rates
-ggplot(summary_all_pairs,aes(avg_co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Co-occurrence (number of infants)")
+#for pairs in which one OTU preempts the other but not the other way around -- fill in their persistence and occurrence values to look for a difference
+one_way_preemption<-summary_all_pairs[summary_all_pairs$preemption=="A or B",]
+for (i in seq(1,nrow(one_way_preemption))){
+  
+  #identify pairs in which A is affected by arrival order but not B
+  #(within a pair, whether each OTU is A or B is random)
+  if (one_way_preemption[i,"order_R2_A"]>one_way_preemption[i,"chrono_R2_A"] & one_way_preemption[i,"order_R2_B"]<=one_way_preemption[i,"chrono_R2_B"] ){
+    focal<-as.character(one_way_preemption[i,"OTU_A"])
+    one_way_preemption[i,"focal"]=focal #this is the OTU that IS affected by arrival order
+    one_way_preemption[i,"focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"mean_persistence"]
+    one_way_preemption[i,"focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"num_infants"]
+    
+    non_focal<-as.character(one_way_preemption[i,"OTU_B"])
+    one_way_preemption[i,"non_focal"]=non_focal #this is the OTU that is NOT affected by arrival order
+    one_way_preemption[i,"non_focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"mean_persistence"]
+    one_way_preemption[i,"non_focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"num_infants"]
+  }
+   #identify pairs in which B is affected by arrival order but not A
+    if (one_way_preemption[i,"order_R2_A"]<=one_way_preemption[i,"chrono_R2_A"] & one_way_preemption[i,"order_R2_B"]>one_way_preemption[i,"chrono_R2_B"] ){
+      focal<-as.character(one_way_preemption[i,"OTU_B"])
+      one_way_preemption[i,"focal"]=focal #this is the OTU that IS affected by arrival order
+      one_way_preemption[i,"focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"mean_persistence"]
+      one_way_preemption[i,"focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"num_infants"]
+    
+        non_focal<-as.character(one_way_preemption[i,"OTU_A"])
+      one_way_preemption[i,"non_focal"]=non_focal #this is the OTU that is NOT affected by arrival order
+      one_way_preemption[i,"non_focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"mean_persistence"]
+      one_way_preemption[i,"non_focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"num_infants"]
+    }
+}
 
-#plot the strength of these pairwise relationships according to taxonomic relatedness
-grid.arrange(ggplot(summary_all_pairs,aes(preemption,fill=same_phylum))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""),ggplot(summary_all_pairs,aes(preemption,fill=same_class))+geom_bar(position="dodge")+theme_bw()+scale_fill_brewer(palette="Set2")+xlab(""))
+##Ecological network analysis
+#run spiec-easi and extract edge weights
+tmp<-as.matrix(data.frame(otus[,OTU_list]))
+se.mb.amgut <- spiec.easi(tmp, method='mb', lambda.min.ratio=1e-2,nlambda=20, pulsar.params=list(rep.num=50))
+ig.mb     <- adj2igraph(getRefit(se.mb.amgut))
+plot(ig.mb,vertex.size=1, vertex.label=NA)
+sebeta <- symBeta(getOptBeta(se.mb.amgut), mode='ave')
+elist.mb <- Matrix::summary(sebeta)
 
+
+##Code for figures in document
+#figure 1 - arrival time vs persistence across OTUs
+ggplot(summary_all_OTUs,aes(mean_arrival,mean_persistence,fill=num_infants))+geom_point(shape=21,size=2)+scale_fill_gradient(low="red",high="yellow",name="Population\nfrequency\n(# infants)")+theme_bw()+xlab("Mean arrival time for each OTU across infants")+ylab("Mean persistence score for each OTU across infants")+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))+theme(legend.text=element_text(size=12))+theme(legend.title=element_text(size=13))
+
+#figure 2a - taxonomic composition of each priority effects group
+colourCount = length(unique(summary_all_OTUs$Class))
+ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Class))+geom_bar()+theme_bw()+xlab("")+scale_fill_manual(values = getPalette(colourCount))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))+theme(legend.text=element_text(size=12))+theme(legend.title=element_text(size=13))+ylab("Number of OTUs")
+
+#figure 2b - priority effects distribution of each class
+by_class<-data.frame(table(summary_all_OTUs$Class,summary_all_OTUs$priority_effects))
+by_class$sum<-rep(table(summary_all_OTUs$Class))
+by_class$proportion<-by_class$Freq/by_class$sum
+by_class<-by_class[!by_class$Var1%in%by_class[by_class$proportion==1,"Var1"],]
+by_class<-by_class[by_class$Var1!="Chloroplast" & by_class$Var1!="unclassified",]
+ggplot(by_class[by_class$Var1!="Chloroplast",],aes(Var2,proportion,fill=Var1))+geom_bar(stat="identity")+facet_wrap(~Var1)+theme_bw()+guides(fill=F)+xlab("")+ylab("Proportion of OTUs in each category")+theme(axis.text.x = element_text(angle=45,hjust=1))+theme(axis.text=element_text(size=14))+theme(axis.title=element_text(size=16))+theme(strip.text = element_text(size=16))
+
+#figure 3a - priority effects vs population frequency
+ggplot(summary_all_OTUs,aes(num_infants,arrival_persistence_cor,color=arrival_persistence_cor<0))+geom_point()+stat_smooth(method="lm")+guides(color=F)+xlab("Population frequency (# infants)")+ylab("Pearson's correlation between arrival and persistence")+theme_bw()+scale_color_manual(values=c("royalblue","indianred"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
+c
+
+#figure 3b - priority effects vs population frequency
+ggplot(summary_all_OTUs[!is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,num_infants,fill=priority_effects))+geom_boxplot()+guides(fill=F)+ylab("Population frequency (# infants)")+theme_bw()+xlab("")+scale_fill_manual(values=c("indianred","grey50","royalblue"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
+
+#figure 4a - priority effects vs persistence
+ggplot(summary_all_OTUs,aes(mean_persistence,arrival_persistence_cor,color=arrival_persistence_cor<0))+geom_point()+stat_smooth(method="lm")+guides(color=F)+xlab("Mean persistence score for each OTU across infants")+ylab("Pearson's correlation between arrival and persistence")+theme_bw()+scale_color_manual(values=c("royalblue","indianred"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
+
+#figure 4b - priority effects vs persistence
+ggplot(summary_all_OTUs[!is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,mean_persistence,fill=priority_effects))+geom_boxplot()+guides(fill=F)+ylab("Mean persistence score for each OTU across infants")+theme_bw()+xlab("")+scale_fill_manual(values=c("indianred","grey50","royalblue"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
+
+#figure 5a - one-way preemption effects & persistence
+ggplot(one_way_preemption,aes(focal_persistence,non_focal_persistence))+geom_point()+theme_bw()+geom_abline(slope=1,linetype="dashed")+xlim(0,1)+ylim(0,1)+xlab("Mean persistence of 'inferior competitor'")+ylab("Mean persistence of 'superior competitor'")+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
+
+#figure 5b - one-way preemption effects & population frequency
+ggplot(one_way_preemption,aes(focal_occurrence,non_focal_occurrence))+geom_point()+theme_bw()+geom_abline(slope=1,linetype="dashed")+xlab("Population frequency (# infants) of 'inferior competitor'")+ylab("Population frequency (# infants) of 'superior competitor'")+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))+xlim(0,60)+ylim(0,60)
+
+#figure 6a
+grid.arrange(ggplot(summary_all_pairs[summary_all_pairs$preemption=="Arrival time",],aes("",fill=same_phylum))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="A or B",],aes("",fill=same_phylum))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="Both A and B",],aes("",fill=same_phylum))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.text=element_text(size=14))+theme(axis.ticks=element_blank()),nrow=1)
+grid.arrange(ggplot(summary_all_pairs[summary_all_pairs$preemption=="Arrival time",],aes("",fill=same_class))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="A or B",],aes("",fill=same_class))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="Both A and B",],aes("",fill=same_class))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.text=element_text(size=14))+theme(axis.ticks=element_blank()),nrow=1)
+
+#figure 6b
+ggplot(summary_all_pairs,aes(avg_co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Average co-occurrence within infants")+theme(axis.text=element_text(size=14))+theme(axis.title=element_text(size=16))+theme(strip.text=element_text(size=15))
 
 
