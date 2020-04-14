@@ -8,23 +8,21 @@ library(RColorBrewer)
 library(gridExtra)
 getPalette=colorRampPalette(brewer.pal(9,"Set1"))
 
-##import data files: OTU tables ("otu"), taxonomic annotations ("SILVA taxonomy"), trait annotations ("predicted_trait_data")
-otus <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/otus.csv")
-SILVA_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/SILVA_taxonomy.csv")
-predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/microbiomepriorityeffects-master/predicted_trait_data.csv")
+##import data files: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
+humangut_otus <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/otus.csv")
+humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/SILVA_taxonomy.csv")
+predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/predicted_trait_data.csv")
 
-
-##Make a list of OTUs that have predicted traits & are seen in 5 or more subjects
-OTU_list<-c()
-for (OTU in predicted_trait_data$otu){
-  OTU_all_samples<-otus[,c("subject",OTU)]
-  
+##Make a list of OTUs that are seen in 20% or more of individuals
+humangut_OTU_list<-c()
+for (OTU in colnames(humangut_otus)[5:2420]){ #loop through all OTUs detected at any point in the study (2416 unique OTUs)
+  OTU_all_samples<-humangut_otus[,c("subject",OTU)] #subset to this specific OTU
   colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,]
-  
-  if (length(unique(OTU_all_indiv$subject))>=5){OTU_list<-c(OTU_list,OTU)}
-  
+  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
+  if (length(unique(OTU_all_indiv$subject))>=12){humangut_OTU_list<-c(humangut_OTU_list,OTU)} #count the number of unique infant hosts in which this OTU had non-zero abundance for any amount of time
+  #consider this OTU only if it is present in 20% or more of individuals (11.2)
 }
+#We are considering 670 OTUs in this analysis
 
 ##Persistence analysis
 summary_all_OTUs<-data.frame(matrix(nrow=0,ncol=26)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
