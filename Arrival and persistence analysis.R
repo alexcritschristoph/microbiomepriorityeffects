@@ -8,20 +8,14 @@ library(RColorBrewer)
 library(gridExtra)
 getPalette=colorRampPalette(brewer.pal(9,"Set1"))
 
-##import data files: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
+##import data files
+#human data: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
 humangut_otus <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/otus.csv")
 humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/SILVA_taxonomy.csv")
 predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/predicted_trait_data.csv")
-
-##Make a list of OTUs that are seen in 20% or more of individuals (670 OTUs)
-humangut_OTU_list<-c()
-for (OTU in colnames(humangut_otus)[5:2420]){ #loop through all OTUs detected at any point in the study (2416 OTUs)
-  OTU_all_samples<-humangut_otus[,c("subject",OTU)] #subset to this specific OTU
-  colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
-  if (length(unique(OTU_all_indiv$subject))>=12){humangut_OTU_list<-c(humangut_OTU_list,OTU)} #count the number of unique infant hosts in which this OTU had non-zero abundance for any amount of time
-  #consider this OTU only if it is present in 20% or more of individuals (11.2)
-}
+#mouse data: OTU tables ("murine_otus"), taxonomic annotations ("murine_taxonomy")
+murine_OTUs<-read_csv("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_OTUs.csv")
+murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_taxonomy.xlsx")
 
 ##This function creates a data frame of the relative abundances of OTU X in subject Y over time
 df_subset<-function(OTU_table,OTU_name,subject_name){
@@ -76,12 +70,38 @@ calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
   }
 }
 
+
+##Within each dataset, make a list of OTUs that are seen in at least 20% of hosts
+#human gut
+humangut_OTU_list<-c()
+for (OTU in colnames(humangut_otus)[5:2420]){ #loop through all OTUs detected at any point in the study (2416 OTUs)
+  OTU_all_samples<-humangut_otus[,c("subject",OTU)] #subset to this specific OTU
+  colnames(OTU_all_samples)<-c("subject","abundance")
+  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
+  if (length(unique(OTU_all_indiv$subject))>=12){humangut_OTU_list<-c(humangut_OTU_list,OTU)} #count the number of unique infant hosts in which this OTU had non-zero abundance for any amount of time
+  #consider this OTU only if it is present in 20% or more of individuals (11.2)
+  #Final list includes 670 OTUs
+}
+#mouse gut
+murine_OTU_list<-c()
+for (OTU in colnames(murine_OTUs[5:3099])){ #loop through all OTUs detected at any point in the study (3095)
+  OTU_all_samples<-murine_OTUs[,c("subject",OTU)] #subset to this specific OTU
+  colnames(OTU_all_samples)<-c("subject","abundance")
+  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
+  if (length(unique(OTU_all_indiv$subject))>=3){murine_OTU_list<-c(murine_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
+  #consider this OTU only if it is present in 20% or more of individuals (2.4)
+  #Final list includes 971 OTUs
+}
+murine_OTUs<-murine_OTUs[murine_OTUs$t<300,] #remove the last time-point because there was a 6-month gap in sampling
+
+
 ##Identify OTUs whose persistence depends on arrival timing
+#human gut
 summary_humangut_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
 humangut_list<-list()
 i=1
 
-for (OTU in OTU_list){
+for (OTU in humangut_OTU_list){
   data_per_OTU<-data.frame(matrix(nrow=0,ncol=4))
   
   for (subjectID in levels(factor(otus$subject))){
@@ -105,13 +125,49 @@ for (OTU in OTU_list){
   
   i=i+1
 }
-
 #identify time-dependent colonizers
 summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue<0.05 & summary_humangut_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
 summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue<0.05 & summary_humangut_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
 summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
 
 summary_humangut_OTUs$priority_effects<-factor(summary_humangut_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
+
+#mouse gut
+summary_murine_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
+murine_list<-list()
+i=1
+
+for (OTU in murine_OTU_list){
+  data_per_OTU<-data.frame(matrix(nrow=0,ncol=4))
+  
+  for (subjectID in levels(factor(murine_OTUs$subject))){
+    otus_subset<-df_subset(murine_OTUs,OTU,subjectID)
+    arrival_time<-calculate_arrival_time(otus_subset,OTU)
+    persistence<-calculate_persistence(otus_subset,OTU,arrival_time,30) #1 month rather than 6 months?
+    data_per_OTU<-rbind(data_per_OTU,data.frame(OTU,subjectID,arrival_time,persistence))
+  }
+  
+  mean_arrival<-mean(data_per_OTU$arrival_time,na.rm=T)
+  mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
+  arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
+  arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
+  num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
+  taxonomy<-murine_taxonomy[murine_taxonomy$OTU==OTU,c(5,7,9,11,13)]
+
+  if (num_hosts>=3){
+  summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
+  murine_list[[i]]<-data_per_OTU
+  }
+  
+  i=i+1
+}
+#identify time-dependent colonizers
+summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue<0.05 & summary_murine_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
+summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue<0.05 & summary_murine_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
+summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
+
+summary_murine_OTUs$priority_effects<-factor(summary_murine_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
+
 
 
 
