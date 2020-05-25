@@ -106,7 +106,7 @@ for (OTU in colnames(rumen_otus[4:2547])){ #loop through all OTUs detected at an
   OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
   if (length(unique(OTU_all_indiv$subject))>=9){rumen_OTU_list<-c(rumen_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
   #consider this OTU only if it is present in 20% or more of individuals (9)
-  #Final list includes 2544 OTUs (because the study had already subsetted to OTUs present in 80% of individuals)
+  #Final list includes 2544 OTUs (because the original study had already subsetted to OTUs present in 80% of individuals)
   }
 
 ##Identify OTUs whose persistence depends on arrival timing
@@ -139,11 +139,10 @@ for (OTU in humangut_OTU_list){
   
   i=i+1
 }
-#identify time-dependent colonizers
+
 summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue<0.05 & summary_humangut_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
 summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue<0.05 & summary_humangut_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
 summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-
 summary_humangut_OTUs$priority_effects<-factor(summary_humangut_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
 
 #mouse gut
@@ -175,11 +174,10 @@ for (OTU in murine_OTU_list){
   
   i=i+1
 }
-#identify time-dependent colonizers
+
 summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue<0.05 & summary_murine_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
 summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue<0.05 & summary_murine_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
 summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-
 summary_murine_OTUs$priority_effects<-factor(summary_murine_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
 
 #cow gut
@@ -219,12 +217,39 @@ for (OTU in rumen_OTU_list){
   
   i=i+1
 }
-#identify time-dependent colonizers
+
 summary_rumen_OTUs[!is.na(summary_rumen_OTUs$arrival_persistence_pvalue) & summary_rumen_OTUs$arrival_persistence_pvalue<0.05 & summary_rumen_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
 summary_rumen_OTUs[!is.na(summary_rumen_OTUs$arrival_persistence_pvalue) & summary_rumen_OTUs$arrival_persistence_pvalue<0.05 & summary_rumen_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
 summary_rumen_OTUs[!is.na(summary_rumen_OTUs$arrival_persistence_pvalue) & summary_rumen_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-
 summary_rumen_OTUs$priority_effects<-factor(summary_rumen_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
+
+
+##Figures
+
+#figure 1: barplot of priority effects categories, by taxonomic class & data source
+colnames(summary_rumen_OTUs)[7:10]=c("Phylum","Class","Order","Family")
+summary_all_OTUs<-rbind(summary_humangut_OTUs[,c(1,8,9,10,11,14)],summary_murine_OTUs[,c(1,7,8,9,10,12)],summary_rumen_OTUs[,c(1,7,8,9,10,13)])
+summary_all_OTUs$data_source<-c(rep("human gut",nrow(summary_humangut_OTUs)),rep("mouse gut",nrow(summary_murine_OTUs)),rep("cow rumen",nrow(summary_rumen_OTUs)))
+#standardize names, remove unclassified OTUs
+summary_all_OTUs[summary_all_OTUs$Class=="Erysipelotrichi" & !is.na(summary_all_OTUs$Class),"Class"]="Erysipelotrichia"
+summary_all_OTUs[summary_all_OTUs$Class=="Verruco-5" & !is.na(summary_all_OTUs$Class),"Class"]="Verrucomicrobiae"
+summary_all_OTUs[summary_all_OTUs$Class=="4C0d-2" & !is.na(summary_all_OTUs$Class),"Class"]="Melainabacteria"
+summary_all_OTUs[summary_all_OTUs$Class=="[Lentisphaeria]" & !is.na(summary_all_OTUs$Class),"Class"]="Lentisphaeria"
+summary_all_OTUs<-summary_all_OTUs[summary_all_OTUs$Class!="" & summary_all_OTUs$Class!="Chloroplast" & substr(summary_all_OTUs$Class,nchar(summary_all_OTUs$Class)-11,nchar(summary_all_OTUs$Class))!="unclassified",]
+#table by class, priority effect category, and dataset; then standardize by # counts per category per dataset
+freq_table<-data.frame(table(summary_all_OTUs$Class,summary_all_OTUs$priority_effects,summary_all_OTUs$data_source))
+freq_table$Var1<-as.character(freq_table$Var1)
+class_totals<-rep(aggregate(freq_table$Freq,by=list(freq_table$Var2,freq_table$Var3),FUN=function(x){sum(x)})[,3],each=nlevels(factor(freq_table$Var1)))
+freq_table$Total<-class_totals
+freq_table$Proportion<-freq_table$Freq/freq_table$Total
+#plot
+freq_table$Var3<-factor(freq_table$Var3,levels=c("human gut","mouse gut","cow rumen"))
+freq_table$Var2<-as.character(freq_table$Var2)
+freq_table[freq_table$Var2=="Prefers early arrival" & !is.na(freq_table$Var2),"Var2"]="Prefers\nearly\narrival"
+freq_table[freq_table$Var2=="Prefers late arrival" & !is.na(freq_table$Var2),"Var2"]="Prefers\nlate\narrival"
+freq_table$Var2<-factor(freq_table$Var2,levels=c("Prefers\nearly\narrival","None","Prefers\nlate\narrival"))
+ggplot(freq_table,aes(Var2,Proportion,fill=Var1))+facet_wrap(~Var3)+geom_bar(stat="identity")+theme_classic()+scale_fill_manual(values = getPalette(nlevels(factor(freq_table$Var1))))+theme(axis.text=element_text(size=16))+xlab("")+ylab("")+theme(legend.text =element_text(size=16))+theme(axis.text.x=element_blank())+theme(axis.ticks.x = element_blank())
+
 
 
 ----------------------------------
