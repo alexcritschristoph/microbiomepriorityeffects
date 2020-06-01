@@ -127,14 +127,14 @@ for (OTU in humangut_OTU_list){
   
   mean_arrival<-mean(data_per_OTU$arrival_time,na.rm=T)
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
-  arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
-  arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   taxonomy<-humangut_taxonomy[humangut_taxonomy$otu==OTU,c(2,4:9)]
 
   if (num_hosts>=12){
-  summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
-  humangut_list[[i]]<-data_per_OTU
+      arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
+      arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
+      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
+      humangut_list[[i]]<-data_per_OTU
   }
   
   i=i+1
@@ -162,14 +162,14 @@ for (OTU in murine_OTU_list){
   
   mean_arrival<-mean(data_per_OTU$arrival_time,na.rm=T)
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
-  arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
-  arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   taxonomy<-murine_taxonomy[murine_taxonomy$OTU==OTU,c(5,7,9,11,13)]
 
   if (num_hosts>=3){
-  summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
-  murine_list[[i]]<-data_per_OTU
+      arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
+      arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
+      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
+      murine_list[[i]]<-data_per_OTU
   }
   
   i=i+1
@@ -198,8 +198,6 @@ for (OTU in rumen_OTU_list){
   
   mean_arrival<-mean(data_per_OTU$arrival_time,na.rm=T)
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
-  arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
-  arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   
   taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==OTU,3:8]
@@ -211,8 +209,10 @@ for (OTU in rumen_OTU_list){
   species<-substr(taxonomy[6],4,nchar(taxonomy[6]))
 
   if (num_hosts>=9){
-  summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,phylum,class,order,family,genus,species))
-  rumen_list[[i]]<-data_per_OTU
+      arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
+      arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
+      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,phylum,class,order,family,genus,species))
+      rumen_list[[i]]<-data_per_OTU
   }
   
   i=i+1
