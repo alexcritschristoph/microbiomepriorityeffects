@@ -10,7 +10,7 @@ library(ape)
 library(vegan)
 getPalette=colorRampPalette(brewer.pal(9,"Set1"))
 
-##import data files
+##import OTU tables and OTU taxonomy
 #human data: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
 humangut_otus <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/otus.csv")
 humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/SILVA_taxonomy.csv")
@@ -21,6 +21,12 @@ murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data
 #cow data: OTU tables ("rumen_otus"), taxonomic annotations ("rumen_taxonomy")
 rumen_otus <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/rumen_OTUs.csv")
 rumen_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/Rumen gut taxonomy.csv")
+
+
+
+------------------------------------------------------------------------------------------------------
+
+
 
 ##This function creates a data frame of the relative abundances of OTU X in subject Y over time
 df_subset<-function(OTU_table,OTU_name,subject_name){
@@ -41,7 +47,7 @@ calculate_arrival_time<-function(otus_subset,OTU_name){
   else {return(NA)}
 }
 
-##This function returns the proportion of a certain window (set by obs_length) after arrival in which OTU X was detected
+##This function returns persistence (the proportion of a certain window (set by obs_length) after arrival in which OTU X was detected)
 calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
   
   if (is.na(arrival_time)) {return(NA)}
@@ -74,6 +80,12 @@ calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
   return(prop_persistence)
   }
 }
+
+
+
+------------------------------------------------------------------------------------------------------
+
+
 
 
 ##Within each dataset, make a list of OTUs that are seen in at least 20% of hosts
@@ -109,9 +121,14 @@ for (OTU in colnames(rumen_otus[4:2547])){ #loop through all OTUs detected at an
   #Final list includes 2544 OTUs (because the original study had already subsetted to OTUs present in 80% of individuals)
   }
 
-##Identify OTUs whose persistence depends on arrival timing
+
+
+------------------------------------------------------------------------------------------------------
+
+
+##identify OTUs that are sensitive to microbiome composition upon arrival (t=0)
 #human gut
-summary_humangut_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
+summary_humangut_OTUs<-data.frame(matrix(nrow=0,ncol=13))
 humangut_list<-list()
 i=1
 
@@ -129,21 +146,39 @@ for (OTU in humangut_OTU_list){
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   taxonomy<-humangut_taxonomy[humangut_taxonomy$otu==OTU,c(2,4:9)]
+  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
+  
+   if (num_hosts>=12 & sd(data_per_OTU$persistence)>0){
+  
+      current_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
+      colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
+      for (row in seq(1,nrow(data_per_OTU))){
+          subject<-as.character(data_per_OTU[row,"subjectID"])
+          arrival_time<-data_per_OTU[row,"arrival_time"]
+          persistence<-data_per_OTU[row,"persistence"]
+  
+          #extract current community, remove abundance of focal OTU
+          current_community<-data.frame(otus[otus$subject==subject & otus$t==arrival_time,5:2420])
+    
+          current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+          current_comm_analysis[row,4:2419]<-current_community
+          }
+        current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+        focal<-match(OTU,colnames(current_comm_analysis))
+        current_comm_analysis<-current_comm_analysis[,-c(focal)]
+  
+      dist<-vegdist(current_comm_analysis[,4:2418], method="bray")
+      a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
+      persistence_F<-a$aov.tab[1,4]
+      persistence_pvalue<-a$aov.tab[1,6]
+  
 
-  if (num_hosts>=12){
-      arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
-      arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
-      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
+      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue))
       humangut_list[[i]]<-data_per_OTU
+      i=i+1
+     }  
   }
   
-  i=i+1
-}
-
-summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue<0.05 & summary_humangut_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
-summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue<0.05 & summary_humangut_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
-summary_humangut_OTUs[!is.na(summary_humangut_OTUs$arrival_persistence_pvalue) & summary_humangut_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-summary_humangut_OTUs$priority_effects<-factor(summary_humangut_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
 
 #mouse gut
 summary_murine_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
@@ -164,21 +199,40 @@ for (OTU in murine_OTU_list){
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   taxonomy<-murine_taxonomy[murine_taxonomy$OTU==OTU,c(5,7,9,11,13)]
+  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
 
-  if (num_hosts>=3){
-      arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
-      arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
-      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,taxonomy))
-      murine_list[[i]]<-data_per_OTU
-  }
+  if (num_hosts>=3 & sd(data_per_OTU$persistence)>0){
+      current_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
+      colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
+      for (row in seq(1,nrow(data_per_OTU))){
+          subject<-as.character(data_per_OTU[row,"subjectID"])
+          arrival_time<-data_per_OTU[row,"arrival_time"]
+          persistence<-data_per_OTU[row,"persistence"]
   
-  i=i+1
+          #extract current community, remove abundance of focal OTU
+          current_community<-data.frame(murine_otus[murine_otus$subject==subject & murine_otus$t==arrival_time,5:3099])
+    
+          current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+          current_comm_analysis[row,4:3098]<-current_community
+          }
+        current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+        focal<-match(OTU,colnames(current_comm_analysis))
+        current_comm_analysis<-current_comm_analysis[,-c(focal)]
+  
+      dist<-vegdist(current_comm_analysis[,3:3097], method="bray")
+      a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
+      persistence_F<-a$aov.tab[1,4]
+      persistence_pvalue<-a$aov.tab[1,6]
+  
+    
+      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue))
+      murine_list[[i]]<-data_per_OTU
+      i=i+1
+  }
+ 
 }
 
-summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue<0.05 & summary_murine_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
-summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue<0.05 & summary_murine_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
-summary_murine_OTUs[!is.na(summary_murine_OTUs$arrival_persistence_pvalue) & summary_murine_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-summary_murine_OTUs$priority_effects<-factor(summary_murine_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
+
 
 #cow gut
 
@@ -207,218 +261,36 @@ for (OTU in rumen_OTU_list){
   family<-substr(taxonomy[4],4,nchar(taxonomy[4]))
   genus<-substr(taxonomy[5],4,nchar(taxonomy[5]))
   species<-substr(taxonomy[6],4,nchar(taxonomy[6]))
-
-  if (num_hosts>=9){
-      arrival_persistence_cor<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$estimate
-      arrival_persistence_pvalue<-cor.test(data_per_OTU$arrival_time,data_per_OTU$persistence,met="p")$p.value
-      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,arrival_persistence_cor,arrival_persistence_pvalue,num_hosts,phylum,class,order,family,genus,species))
+  
+  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
+  
+    if (num_hosts>=9 & sd(data_per_OTU$persistence)>0){
+      current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
+      colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
+      for (row in seq(1,nrow(data_per_OTU))){
+          subject<-as.character(data_per_OTU[row,"subjectID"])
+          arrival_time<-data_per_OTU[row,"arrival_time"]
+          persistence<-data_per_OTU[row,"persistence"]
+  
+          #extract current community, remove abundance of focal OTU
+          current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & rumen_otus$t==arrival_time,5:2547])
+    
+          current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+          current_comm_analysis[row,4:2547]<-current_community
+          }
+        current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+        focal<-match(OTU,colnames(current_comm_analysis))
+        current_comm_analysis<-current_comm_analysis[,-c(focal)]
+  
+      dist<-vegdist(current_comm_analysis[,3:2546], method="bray")
+      a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
+      persistence_F<-a$aov.tab[1,4]
+      persistence_pvalue<-a$aov.tab[1,6]
+  
+    
+      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue))
       rumen_list[[i]]<-data_per_OTU
-  }
-  
-  i=i+1
-}
-
-summary_rumen_OTUs[!is.na(summary_rumen_OTUs$arrival_persistence_pvalue) & summary_rumen_OTUs$arrival_persistence_pvalue<0.05 & summary_rumen_OTUs$arrival_persistence_cor>0,"priority_effects"]="Prefers late arrival"
-summary_rumen_OTUs[!is.na(summary_rumen_OTUs$arrival_persistence_pvalue) & summary_rumen_OTUs$arrival_persistence_pvalue<0.05 & summary_rumen_OTUs$arrival_persistence_cor<0,"priority_effects"]="Prefers early arrival"
-summary_rumen_OTUs[!is.na(summary_rumen_OTUs$arrival_persistence_pvalue) & summary_rumen_OTUs$arrival_persistence_pvalue>=0.05,"priority_effects"]="None"
-summary_rumen_OTUs$priority_effects<-factor(summary_rumen_OTUs$priority_effects,levels=c("Prefers early arrival","None","Prefers late arrival"))
-
-
-##Figures
-
-#figure 1: barplot of priority effects categories, by taxonomic class & data source
-colnames(summary_rumen_OTUs)[7:10]=c("Phylum","Class","Order","Family")
-summary_all_OTUs<-rbind(summary_humangut_OTUs[,c(1,8,9,10,11,14)],summary_murine_OTUs[,c(1,7,8,9,10,12)],summary_rumen_OTUs[,c(1,7,8,9,10,13)])
-summary_all_OTUs$data_source<-c(rep("human gut",nrow(summary_humangut_OTUs)),rep("mouse gut",nrow(summary_murine_OTUs)),rep("cow rumen",nrow(summary_rumen_OTUs)))
-#standardize names, remove unclassified OTUs
-summary_all_OTUs[summary_all_OTUs$Class=="Erysipelotrichi" & !is.na(summary_all_OTUs$Class),"Class"]="Erysipelotrichia"
-summary_all_OTUs[summary_all_OTUs$Class=="Verruco-5" & !is.na(summary_all_OTUs$Class),"Class"]="Verrucomicrobiae"
-summary_all_OTUs[summary_all_OTUs$Class=="4C0d-2" & !is.na(summary_all_OTUs$Class),"Class"]="Melainabacteria"
-summary_all_OTUs[summary_all_OTUs$Class=="[Lentisphaeria]" & !is.na(summary_all_OTUs$Class),"Class"]="Lentisphaeria"
-summary_all_OTUs<-summary_all_OTUs[summary_all_OTUs$Class!="" & summary_all_OTUs$Class!="Chloroplast" & substr(summary_all_OTUs$Class,nchar(summary_all_OTUs$Class)-11,nchar(summary_all_OTUs$Class))!="unclassified",]
-#table by class, priority effect category, and dataset; then standardize by # counts per category per dataset
-freq_table<-data.frame(table(summary_all_OTUs$Class,summary_all_OTUs$priority_effects,summary_all_OTUs$data_source))
-freq_table$Var1<-as.character(freq_table$Var1)
-class_totals<-rep(aggregate(freq_table$Freq,by=list(freq_table$Var2,freq_table$Var3),FUN=function(x){sum(x)})[,3],each=nlevels(factor(freq_table$Var1)))
-freq_table$Total<-class_totals
-freq_table$Proportion<-freq_table$Freq/freq_table$Total
-#plot
-freq_table$Var3<-factor(freq_table$Var3,levels=c("human gut","mouse gut","cow rumen"))
-freq_table$Var2<-as.character(freq_table$Var2)
-freq_table[freq_table$Var2=="Prefers early arrival" & !is.na(freq_table$Var2),"Var2"]="Prefers\nearly\narrival"
-freq_table[freq_table$Var2=="Prefers late arrival" & !is.na(freq_table$Var2),"Var2"]="Prefers\nlate\narrival"
-freq_table$Var2<-factor(freq_table$Var2,levels=c("Prefers\nearly\narrival","None","Prefers\nlate\narrival"))
-ggplot(freq_table,aes(Var2,Proportion,fill=Var1))+facet_wrap(~Var3)+geom_bar(stat="identity")+theme_classic()+scale_fill_manual(values = getPalette(nlevels(factor(freq_table$Var1))))+theme(axis.text=element_text(size=16))+xlab("")+ylab("")+theme(legend.text =element_text(size=16))+theme(axis.text.x=element_blank())+theme(axis.ticks.x = element_blank())
-
-
-
-----------------------------------
-
-##Pairwise analysis (not current)
-#start with the OTUs that do better if they arrive early, and determine all possible pairs
-#NOTE that this list does not take multiple testing into account
-prefer_early<-as.character(summary_all_OTUs[!is.na(summary_all_OTUs$priority_effects) & summary_all_OTUs$priority_effects=="Prefers early arrival","OTU"]) #names of OTUs in the prefer-early-arrival group
-prefer_early_pairs<-combn(prefer_early,2) #all possible pairs of early-preferring OTUs
-
-#for each pair of OTUs, test whether the relative order of arrival is a BETTER predictor than chronological time.
-summary_all_pairs<-data.frame(matrix(nrow=0,ncol=17))
-for (i in seq(1,ncol(prefer_early_pairs))){
-  OTU_A<-prefer_early_pairs[,i][1]
-  OTU_B<-prefer_early_pairs[,i][2]
-  
-  data_per_pair<-data.frame(matrix(nrow=0,ncol=6))
-  
-  #loop through subjects
-  #in each subject, determine which OTU arrived first
-  for (subjectID in levels(factor(otus$subject))){
-    
-    #subset the data to abundances of two focal OTUS in one subject over time
-    otus_subset<-cbind(otus[otus$subject==subjectID,1:4],otus[otus$subject==subjectID,OTU_A],otus[otus$subject==subjectID,OTU_B])
-    otus_subset$t<-as.numeric(otus_subset$t)
-    otus_subset<-otus_subset[order(otus_subset$t),]
-    colnames(otus_subset)=c("X1","sampleID","subject","t","OTU_A","OTU_B")
-    
-    #check that both OTUs appear at least once before the last sample -- otherwise, skip this subject
-    if (!identical(otus_subset[-c(nrow(otus_subset)),"OTU_A"],rep(0,nrow(otus_subset)-1)) & !identical(otus_subset[-c(nrow(otus_subset)),"OTU_B"],rep(0,nrow(otus_subset)-1))){
-      
-      #calculate arrival time & persistence of A
-      row=1
-      while (otus_subset[row,"OTU_A"]==0){row=row+1}
-      arrival_time_A<-otus_subset[row,"t"]
-      post_arrival_A<-otus_subset[otus_subset$t>arrival_time_A,"OTU_A"] #relative abundance of A after it arrives
-      persistence_A<-length(post_arrival_A[post_arrival_A!=0])/length(post_arrival_A) #proportion of samples in which this OTU occurs after arrival
-      
-      #calculate arrival time & persistence of B
-      row=1
-      while (otus_subset[row,"OTU_B"]==0){row=row+1}
-      arrival_time_B<-otus_subset[row,"t"]
-      post_arrival_B<-otus_subset[otus_subset$t>arrival_time_B,"OTU_B"] #relative abundance of B after both arrive
-      persistence_B<-length(post_arrival_B[post_arrival_B!=0])/length(post_arrival_B) #proportion of samples in which this OTU occurs after arrival
-
-      arrival_difference<-arrival_time_A-arrival_time_B #if A arrives first, this is negative
-      co_occurrence<-nrow(otus_subset[otus_subset$OTU_A!=0 & otus_subset$OTU_B!=0,])/nrow(otus_subset[otus_subset$OTU_A!=0 | otus_subset$OTU_B!=0,]) #This is a measure of the average overlap between OTUs within infants. The value is lowest if they tend to colonize the same infants but do not coexist at the same time.
-    
-      
-      data_per_pair<-rbind(data_per_pair,data.frame(arrival_time_A,arrival_time_B,arrival_difference,persistence_A,persistence_B,co_occurrence))
+      i=i+1
     }
   }
-  #check whether we have a roughly similar distribution of arrival times between the two OTUs. If one always arrives first, then we can't look for priority effects.
-  if (nrow(data_per_pair)>=5 & nrow(data_per_pair[data_per_pair$arrival_difference<=0,])/nrow(data_per_pair)<0.75 & nrow(data_per_pair[data_per_pair$arrival_difference>=0,])/nrow(data_per_pair)<0.75){
-      chrono_R2_A<-summary(lm(persistence_A~arrival_time_A,data_per_pair))$r.squared #how well does chronological time explain the persistence of A?
-      order_R2_A<-summary(lm(persistence_A~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of A?
-      order_directionality_A<-summary(lm(persistence_A~arrival_difference,data_per_pair))$coef[2,1] #if there is a NEGATIVE relationship, that means A persists better when it arrives before B
-        
-        
-      chrono_R2_B<-summary(lm(persistence_B~arrival_time_B,data_per_pair))$r.squared #how well does chronological time explain the persistence of B?
-      order_R2_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$r.squared  #how well does arrival order explain the persistence of B?
-      order_directionality_B<-summary(lm(persistence_B~arrival_difference,data_per_pair))$coef[2,1] #if there is a POSITIVE relationship, that means B persists better when it arrives before A
-     
-      avg_co_occurrence<-mean(data_per_pair$co_occurrence) 
-      num_infants<-nrow(data_per_pair) #total number of infant samples where both are observed at least once
-      
-      SILVA_A<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_A,8:11]
-      SILVA_B<-summary_all_OTUs[summary_all_OTUs$OTU==OTU_B,8:11]
-
-      
-      summary_all_pairs<-rbind(summary_all_pairs,data.frame(OTU_A,OTU_B,chrono_R2_A,order_R2_A,order_directionality_A,chrono_R2_B,order_R2_B,order_directionality_B,avg_co_occurrence,num_infants,SILVA_A,SILVA_B))
-  }
-}
-
-#using taxonomy information, determine whether the two OTUs are from the same or different groups
-summary_all_pairs$same_phylum<-summary_all_pairs$Phylum==summary_all_pairs$Phylum.1
-summary_all_pairs$same_class<-summary_all_pairs$Class==summary_all_pairs$Class.1
-summary_all_pairs$same_order<-summary_all_pairs$Order==summary_all_pairs$Order.1
-summary_all_pairs$same_family<-summary_all_pairs$Family==summary_all_pairs$Family.1
-
-#bin OTU pairs according to whether chronological time is a better predictor of persistence than order for both of them ("Arrival time"), arrival order is better than chrono time for one of the two ("A or B"), and arrival order is better than chrono time for both OTUs ("Both A and B")
-summary_all_pairs<-summary_all_pairs[!is.na(summary_all_pairs$order_R2_A & summary_all_pairs$order_R2_B),]
-summary_all_pairs[summary_all_pairs$order_R2_A>summary_all_pairs$chrono_R2_A & summary_all_pairs$order_directionality_A<0 & summary_all_pairs$order_R2_B>summary_all_pairs$chrono_R2_B & summary_all_pairs$order_directionality_B>0,"preemption"]="Both A and B"
-summary_all_pairs[(summary_all_pairs$order_R2_A>summary_all_pairs$chrono_R2_A & summary_all_pairs$order_directionality_A<0) & (summary_all_pairs$order_R2_B<=summary_all_pairs$chrono_R2_B | summary_all_pairs$order_directionality_B<0),"preemption"]="A or B"
-summary_all_pairs[(summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A | summary_all_pairs$order_directionality_A>0) & (summary_all_pairs$order_R2_B>summary_all_pairs$chrono_R2_B & summary_all_pairs$order_directionality_B>0),"preemption"]="A or B"
-summary_all_pairs[(summary_all_pairs$order_R2_A<=summary_all_pairs$chrono_R2_A & summary_all_pairs$order_R2_B<=summary_all_pairs$chrono_R2_B) | (summary_all_pairs$order_directionality_A>0 | summary_all_pairs$order_directionality_B<0),"preemption"]="Arrival time"
-summary_all_pairs$preemption<-factor(summary_all_pairs$preemption,levels=c("Arrival time","A or B","Both A and B"))
-
-#for pairs in which one OTU preempts the other but not the other way around -- fill in their persistence and occurrence values to look for a difference
-one_way_preemption<-summary_all_pairs[summary_all_pairs$preemption=="A or B",]
-for (i in seq(1,nrow(one_way_preemption))){
-  
-  #identify pairs in which A is affected by arrival order but not B
-  #(within a pair, whether each OTU is A or B is random)
-  if (one_way_preemption[i,"order_R2_A"]>one_way_preemption[i,"chrono_R2_A"] & one_way_preemption[i,"order_R2_B"]<=one_way_preemption[i,"chrono_R2_B"] ){
-    focal<-as.character(one_way_preemption[i,"OTU_A"])
-    one_way_preemption[i,"focal"]=focal #this is the OTU that IS affected by arrival order
-    one_way_preemption[i,"focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"mean_persistence"]
-    one_way_preemption[i,"focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"num_infants"]
-    
-    non_focal<-as.character(one_way_preemption[i,"OTU_B"])
-    one_way_preemption[i,"non_focal"]=non_focal #this is the OTU that is NOT affected by arrival order
-    one_way_preemption[i,"non_focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"mean_persistence"]
-    one_way_preemption[i,"non_focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"num_infants"]
-  }
-   #identify pairs in which B is affected by arrival order but not A
-    if (one_way_preemption[i,"order_R2_A"]<=one_way_preemption[i,"chrono_R2_A"] & one_way_preemption[i,"order_R2_B"]>one_way_preemption[i,"chrono_R2_B"] ){
-      focal<-as.character(one_way_preemption[i,"OTU_B"])
-      one_way_preemption[i,"focal"]=focal #this is the OTU that IS affected by arrival order
-      one_way_preemption[i,"focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"mean_persistence"]
-      one_way_preemption[i,"focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==focal,"num_infants"]
-    
-        non_focal<-as.character(one_way_preemption[i,"OTU_A"])
-      one_way_preemption[i,"non_focal"]=non_focal #this is the OTU that is NOT affected by arrival order
-      one_way_preemption[i,"non_focal_persistence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"mean_persistence"]
-      one_way_preemption[i,"non_focal_occurrence"]=summary_all_OTUs[summary_all_OTUs$OTU==non_focal,"num_infants"]
-    }
-}
-
-##Ecological network analysis
-#run spiec-easi and extract edge weights
-tmp<-as.matrix(data.frame(otus[,OTU_list]))
-se.mb.amgut <- spiec.easi(tmp, method='mb', lambda.min.ratio=1e-2,nlambda=20, pulsar.params=list(rep.num=50))
-ig.mb     <- adj2igraph(getRefit(se.mb.amgut))
-plot(ig.mb,vertex.size=1, vertex.label=NA)
-sebeta <- symBeta(getOptBeta(se.mb.amgut), mode='ave')
-elist.mb <- Matrix::summary(sebeta)
-
-
-##Code for figures in document
-#figure 1 - arrival time vs persistence across OTUs
-ggplot(summary_all_OTUs,aes(mean_arrival,mean_persistence,fill=num_infants))+geom_point(shape=21,size=2)+scale_fill_gradient(low="red",high="yellow",name="Population\nfrequency\n(# infants)")+theme_bw()+xlab("Mean arrival time for each OTU across infants")+ylab("Mean persistence score for each OTU across infants")+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))+theme(legend.text=element_text(size=12))+theme(legend.title=element_text(size=13))
-
-#figure 2a - taxonomic composition of each priority effects group
-colourCount = length(unique(summary_all_OTUs$Class))
-ggplot(summary_all_OTUs[summary_all_OTUs$priority_effects!="None" & !is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,fill=Class))+geom_bar()+theme_bw()+xlab("")+scale_fill_manual(values = getPalette(colourCount))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))+theme(legend.text=element_text(size=12))+theme(legend.title=element_text(size=13))+ylab("Number of OTUs")
-
-#figure 2b - priority effects distribution of each class
-by_class<-data.frame(table(summary_all_OTUs$Class,summary_all_OTUs$priority_effects))
-by_class$sum<-rep(table(summary_all_OTUs$Class))
-by_class$proportion<-by_class$Freq/by_class$sum
-by_class<-by_class[!by_class$Var1%in%by_class[by_class$proportion==1,"Var1"],]
-by_class<-by_class[by_class$Var1!="Chloroplast" & by_class$Var1!="unclassified",]
-ggplot(by_class[by_class$Var1!="Chloroplast",],aes(Var2,proportion,fill=Var1))+geom_bar(stat="identity")+facet_wrap(~Var1)+theme_bw()+guides(fill=F)+xlab("")+ylab("Proportion of OTUs in each category")+theme(axis.text.x = element_text(angle=45,hjust=1))+theme(axis.text=element_text(size=14))+theme(axis.title=element_text(size=16))+theme(strip.text = element_text(size=16))
-
-#figure 3a - priority effects vs population frequency
-ggplot(summary_all_OTUs,aes(num_infants,arrival_persistence_cor,color=arrival_persistence_cor<0))+geom_point()+stat_smooth(method="lm")+guides(color=F)+xlab("Population frequency (# infants)")+ylab("Pearson's correlation between arrival and persistence")+theme_bw()+scale_color_manual(values=c("royalblue","indianred"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
-c
-
-#figure 3b - priority effects vs population frequency
-ggplot(summary_all_OTUs[!is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,num_infants,fill=priority_effects))+geom_boxplot()+guides(fill=F)+ylab("Population frequency (# infants)")+theme_bw()+xlab("")+scale_fill_manual(values=c("indianred","grey50","royalblue"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
-
-#figure 4a - priority effects vs persistence
-ggplot(summary_all_OTUs,aes(mean_persistence,arrival_persistence_cor,color=arrival_persistence_cor<0))+geom_point()+stat_smooth(method="lm")+guides(color=F)+xlab("Mean persistence score for each OTU across infants")+ylab("Pearson's correlation between arrival and persistence")+theme_bw()+scale_color_manual(values=c("royalblue","indianred"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
-
-#figure 4b - priority effects vs persistence
-ggplot(summary_all_OTUs[!is.na(summary_all_OTUs$priority_effects),],aes(priority_effects,mean_persistence,fill=priority_effects))+geom_boxplot()+guides(fill=F)+ylab("Mean persistence score for each OTU across infants")+theme_bw()+xlab("")+scale_fill_manual(values=c("indianred","grey50","royalblue"))+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
-
-#figure 5a - one-way preemption effects & persistence
-ggplot(one_way_preemption,aes(focal_persistence,non_focal_persistence))+geom_point()+theme_bw()+geom_abline(slope=1,linetype="dashed")+xlim(0,1)+ylim(0,1)+xlab("Mean persistence of 'inferior competitor'")+ylab("Mean persistence of 'superior competitor'")+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))
-
-#figure 5b - one-way preemption effects & population frequency
-ggplot(one_way_preemption,aes(focal_occurrence,non_focal_occurrence))+geom_point()+theme_bw()+geom_abline(slope=1,linetype="dashed")+xlab("Population frequency (# infants) of 'inferior competitor'")+ylab("Population frequency (# infants) of 'superior competitor'")+theme(axis.text=element_text(size=15))+theme(axis.title=element_text(size=16))+xlim(0,60)+ylim(0,60)
-
-#figure 6a
-grid.arrange(ggplot(summary_all_pairs[summary_all_pairs$preemption=="Arrival time",],aes("",fill=same_phylum))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="A or B",],aes("",fill=same_phylum))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="Both A and B",],aes("",fill=same_phylum))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.text=element_text(size=14))+theme(axis.ticks=element_blank()),nrow=1)
-grid.arrange(ggplot(summary_all_pairs[summary_all_pairs$preemption=="Arrival time",],aes("",fill=same_class))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="A or B",],aes("",fill=same_class))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.ticks=element_blank())+theme(axis.text=element_text(size=14)),ggplot(summary_all_pairs[summary_all_pairs$preemption=="Both A and B",],aes("",fill=same_class))+geom_bar()+theme_bw()+scale_fill_brewer(palette="Set2")+xlab("")+coord_polar("y")+guides(fill=F)+ylab("")+theme(axis.text=element_text(size=14))+theme(axis.ticks=element_blank()),nrow=1)
-
-#figure 6b
-ggplot(summary_all_pairs,aes(avg_co_occurrence,fill=preemption))+geom_density(alpha=0.5)+facet_wrap(~preemption,nrow=3)+theme_bw()+guides(fill=F)+xlab("Average co-occurrence within infants")+theme(axis.text=element_text(size=14))+theme(axis.title=element_text(size=16))+theme(strip.text=element_text(size=15))
-
 
