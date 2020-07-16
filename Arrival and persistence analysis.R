@@ -673,10 +673,10 @@ sd_persist_med<-summary(summary_rumen_OTUs$sd_persistence)["Median"]
 
 tmp<-summary_rumen_OTUs[summary_rumen_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
-rumen_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"])
+rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])$OTU
 
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
-rumen_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
+rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])$OTU
 
 ##identify partner OTUs within the community at arrival (t=0)
 rumen_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
@@ -692,7 +692,7 @@ for (focal_OTU in rumen_sensitive_OTUs_current){
     subject<-as.character(data_per_OTU[row,"subjectID"])
     arrival_time<-data_per_OTU[row,"arrival_time"]
     persistence<-data_per_OTU[row,"persistence"]
-    current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & otus$t==arrival_time,5:2547])
+    current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & rumen_otus$t==arrival_time,5:2547])
     current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
     current_comm_analysis[row,4:2547]<-current_community
     }
@@ -711,14 +711,23 @@ for (focal_OTU in rumen_sensitive_OTUs_current){
   phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
-  phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
-  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$otu%in%setdiff(phyloseq_taxonomy$otu,colnames(current_comm_analysis[,4:2546])),]
-  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$otu),]
+  phyloseq_taxonomy<-data.frame(rumen_taxonomy)
+  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$X1%in%setdiff(phyloseq_taxonomy$X1,colnames(current_comm_analysis[,4:2546])),]
+  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$X1),]
+  colnames(phyloseq_taxonomy)[2:8]=c("Domain","Phylum","Class","Order","Family","Genus","Species")
+  phyloseq_taxonomy$Domain<-substr(phyloseq_taxonomy$Domain,4,nchar(phyloseq_taxonomy$Domain))
+  phyloseq_taxonomy$Phylum<-substr(phyloseq_taxonomy$Phylum,4,nchar(phyloseq_taxonomy$Phylum))
+  phyloseq_taxonomy$Class<-substr(phyloseq_taxonomy$Class,4,nchar(phyloseq_taxonomy$Class))
+  phyloseq_taxonomy$Order<-substr(phyloseq_taxonomy$Order,4,nchar(phyloseq_taxonomy$Order))
+  phyloseq_taxonomy$Family<-substr(phyloseq_taxonomy$Family,4,nchar(phyloseq_taxonomy$Family))
+  phyloseq_taxonomy$Genus<-substr(phyloseq_taxonomy$Genus,4,nchar(phyloseq_taxonomy$Genus))
+  phyloseq_taxonomy$Species<-substr(phyloseq_taxonomy$Species,4,nchar(phyloseq_taxonomy$Species))
   rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
   phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
 
-  #3: sample info (add a discrete time variable, add rownames)
+  #3: sample info (add rownames)
   phyloseq_samples<-data.frame(current_comm_analysis[,c(1:3)])
+  phyloseq_samples$subject<-paste("X",phyloseq_samples$subject,sep="")
   rownames(phyloseq_samples)<-phyloseq_samples[,1]
   phyloseq_samples<-phyloseq_samples[,-c(1)]
   phyloseq_samples<-sample_data(phyloseq_samples)
@@ -735,7 +744,7 @@ for (focal_OTU in rumen_sensitive_OTUs_current){
   sigtab$x<-seq(1,nrow(sigtab))
   
   #add focal OTU info and bind to master dataframe
-  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==OTU,3:8]
+  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==focal_OTU,3:8]
   sigtab[,"focal_OTU"]<-focal_OTU
   sigtab[,"focal_Phylum"]<-substr(taxonomy[1],4,nchar(taxonomy[1]))
   sigtab[,"focal_Class"]<-substr(taxonomy[2],4,nchar(taxonomy[2]))
@@ -753,9 +762,10 @@ rumen_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in rumen_sensitive_OTUs_prior){
     data_per_OTU<-rumen_list[[match(focal_OTU,summary_rumen_OTUs$OTU)]]
-  
     prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
     colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
+    data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
+  
     for (row in seq(1,nrow(data_per_OTU))){
         subject<-as.character(data_per_OTU[row,"subjectID"])
         arrival_time<-data_per_OTU[row,"arrival_time"]
@@ -789,14 +799,23 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
-  phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
-  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$otu%in%setdiff(phyloseq_taxonomy$otu,colnames(prior_comm_analysis[,4:2546])),]
-  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$otu),]
+  phyloseq_taxonomy<-data.frame(rumen_taxonomy)
+  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$X1%in%setdiff(phyloseq_taxonomy$X1,colnames(current_comm_analysis[,4:2546])),]
+  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$X1),]
+  colnames(phyloseq_taxonomy)[2:8]=c("Domain","Phylum","Class","Order","Family","Genus","Species")
+  phyloseq_taxonomy$Domain<-substr(phyloseq_taxonomy$Domain,4,nchar(phyloseq_taxonomy$Domain))
+  phyloseq_taxonomy$Phylum<-substr(phyloseq_taxonomy$Phylum,4,nchar(phyloseq_taxonomy$Phylum))
+  phyloseq_taxonomy$Class<-substr(phyloseq_taxonomy$Class,4,nchar(phyloseq_taxonomy$Class))
+  phyloseq_taxonomy$Order<-substr(phyloseq_taxonomy$Order,4,nchar(phyloseq_taxonomy$Order))
+  phyloseq_taxonomy$Family<-substr(phyloseq_taxonomy$Family,4,nchar(phyloseq_taxonomy$Family))
+  phyloseq_taxonomy$Genus<-substr(phyloseq_taxonomy$Genus,4,nchar(phyloseq_taxonomy$Genus))
+  phyloseq_taxonomy$Species<-substr(phyloseq_taxonomy$Species,4,nchar(phyloseq_taxonomy$Species))
   rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
   phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
 
-  #3: sample info (add a discrete time variable, add rownames)
-  phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
+  #3: sample info (add rownames)
+  phyloseq_samples<-data.frame(current_comm_analysis[,c(1:3)])
+  phyloseq_samples$subject<-paste("X",phyloseq_samples$subject,sep="")
   rownames(phyloseq_samples)<-phyloseq_samples[,1]
   phyloseq_samples<-phyloseq_samples[,-c(1)]
   phyloseq_samples<-sample_data(phyloseq_samples)
@@ -813,7 +832,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   sigtab$x<-seq(1,nrow(sigtab))
   
   #add focal OTU info and bind to master dataframe
-  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==OTU,3:8]
+  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==focal_OTU,3:8]
   sigtab[,"focal_OTU"]<-focal_OTU
   sigtab[,"focal_Phylum"]<-substr(taxonomy[1],4,nchar(taxonomy[1]))
   sigtab[,"focal_Class"]<-substr(taxonomy[2],4,nchar(taxonomy[2]))
@@ -821,7 +840,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   sigtab[,"focal_Family"]<-substr(taxonomy[4],4,nchar(taxonomy[4]))
   sigtab[,"focal_Genus"]<-substr(taxonomy[5],4,nchar(taxonomy[5]))
   sigtab[,"focal_Species"]<-substr(taxonomy[6],4,nchar(taxonomy[6]))
-  rumen_current_deseq<-rbind(rumen_current_deseq,sigtab)
+  rumen_prior_deseq<-rbind(rumen_prior_deseq,sigtab)
 }
                                  
                                  
