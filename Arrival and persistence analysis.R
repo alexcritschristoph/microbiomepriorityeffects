@@ -118,7 +118,7 @@ for (OTU in humangut_OTU_list){
   if (num_hosts>=12 & sd(data_per_OTU$persistence)>0){
   
       ##dependence on microbiome composition at arrival (t=0)
-      current_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
+      current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2419))
       colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
       for (row in seq(1,nrow(data_per_OTU))){
           subject<-as.character(data_per_OTU[row,"subjectID"])
@@ -143,7 +143,7 @@ for (OTU in humangut_OTU_list){
       persistence_pvalue<-a$aov.tab[1,6]
     
       ##dependence on microbiome composition before arrival (t=-1)
-      prior_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
+      prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2419))
       colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
       for (row in seq(1,nrow(data_per_OTU))){
           subject<-as.character(data_per_OTU[row,"subjectID"])
@@ -563,28 +563,28 @@ for (OTU in colnames(rumen_otus[4:2547])){ #loop through all OTUs detected at an
   }
                        
 
-##Identify OTUs that are sensitive to microbiome composition (needs to be updated)
+##Identify OTUs that are sensitive to microbiome composition
 
-#cow gut
-
-summary_rumen_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
-rumen_list<-list()
+summary_rumen_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #this dataframe contains summary statistics of mean arrival time, mean persistence, and sensitivity to microbiome composition of each OTU
+rumen_list<-list() #each entry of this list contains the arrival time & persistence of the OTU in each host
 i=1
 
 for (OTU in rumen_OTU_list){
   data_per_OTU<-data.frame(matrix(nrow=0,ncol=4))
   
+  #generate a data frame with the arrival time & persistence of this OTU in each host
   for (subjectID in levels(factor(rumen_otus$subject))){
     otus_subset<-df_subset(rumen_otus,OTU,subjectID)
     arrival_time<-calculate_arrival_time(otus_subset,OTU)
-    persistence<-calculate_persistence(otus_subset,OTU,arrival_time,180)
+    persistence<-calculate_persistence(otus_subset,OTU,arrival_time,180)  #presence/absence persistence within 6-month window (180 days) after arrival
     data_per_OTU<-rbind(data_per_OTU,data.frame(OTU,subjectID,arrival_time,persistence))
   }
   
+  #calculate summary statistics; find taxonomy
   mean_arrival<-mean(data_per_OTU$arrival_time,na.rm=T)
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
+  sd_persistence<-sd(data_per_OTU$persistence,na.rm=T)
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
-  
   taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==OTU,3:8]
   phylum<-substr(taxonomy[1],4,nchar(taxonomy[1]))
   class<-substr(taxonomy[2],4,nchar(taxonomy[2]))
@@ -592,10 +592,12 @@ for (OTU in rumen_OTU_list){
   family<-substr(taxonomy[4],4,nchar(taxonomy[4]))
   genus<-substr(taxonomy[5],4,nchar(taxonomy[5]))
   species<-substr(taxonomy[6],4,nchar(taxonomy[6]))
+  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]  #arrival time is NA if it never occurred in that host; persistence is NA if no samples were taken within 6 months after arrival
   
-  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
-  
+  #Test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
     if (num_hosts>=9 & sd(data_per_OTU$persistence)>0){
+      
+      ##dependence on microbiome composition at arrival (t=0)
       current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
       colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
       for (row in seq(1,nrow(data_per_OTU))){
@@ -603,25 +605,221 @@ for (OTU in rumen_OTU_list){
           arrival_time<-data_per_OTU[row,"arrival_time"]
           persistence<-data_per_OTU[row,"persistence"]
   
-          #extract current community, remove abundance of focal OTU
+          #extract community at arrival time in each host
           current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & rumen_otus$t==arrival_time,5:2547])
-    
           current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
           current_comm_analysis[row,4:2547]<-current_community
           }
-        current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
-        focal<-match(OTU,colnames(current_comm_analysis))
-        current_comm_analysis<-current_comm_analysis[,-c(focal)]
+      
+      #remove focal OTU from community
+      current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+      focal<-match(OTU,colnames(current_comm_analysis))
+      current_comm_analysis<-current_comm_analysis[,-c(focal)]
   
+      #record results of adonis test
       dist<-vegdist(current_comm_analysis[,3:2546], method="bray")
       a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
       persistence_F<-a$aov.tab[1,4]
       persistence_pvalue<-a$aov.tab[1,6]
-  
+      
+      ##dependence on microbiome composition before arrival (t=-1)
+      prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
+      colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
+      for (row in seq(1,nrow(data_per_OTU))){
+          subject<-as.character(data_per_OTU[row,"subjectID"])
+          arrival_time<-data_per_OTU[row,"arrival_time"]
+          persistence<-data_per_OTU[row,"persistence"]
+        
+          #in each host, find the last timepoint taken before arrival & extract community
+          comm_subset<-rumen_otus[rumen_otus$subject==subject,]
+          comm_subset<-comm_subset[order(comm_subset$t),]
+          if (match(arrival_time,comm_subset$t)>1){
+              prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
+              prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:2547])
+              prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+              prior_comm_analysis[row,4:2547]<-prior_community
+          }
+       }
+      
+      #remove focal OTU from community
+      prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
+      focal<-match(OTU,colnames(prior_comm_analysis))
+      prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
+      prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
+      
+      #record results of adonis test
+      dist<-vegdist(prior_comm_analysis[,3:2546], method="bray")
+      a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
+      persistence_F_prior<-a$aov.tab[1,4]
+      persistence_pvalue_prior<-a$aov.tab[1,6]
     
-      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue))
+      #iteratively update data frames
+      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
       rumen_list[[i]]<-data_per_OTU
       i=i+1
     }
   }
+                                 
+                                 
+##DESeq analysis of "partner" OTUs whose abundance at (t=0) or before (t=-1) arrival predicts persistence of "focal" OTU
+
+#to be detectably sensitive to microbiome composition, OTUs need to vary a lot in persistence
+#here I am considering the set of OTUs with variation in persistence (SD) above the median level-- but this could be adjusted
+                                 
+sd_persist_med<-summary(summary_rumen_OTUs$sd_persistence)["Median"]
+
+tmp<-summary_rumen_OTUs[summary_rumen_OTUs$sd_persistence>=sd_persist_med,]
+tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
+rumen_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"])
+
+tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
+rumen_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
+
+##identify partner OTUs within the community at arrival (t=0)
+rumen_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
+
+#set up dataframe of community at arrival again (for the small number of sensitive OTUs)
+for (focal_OTU in rumen_sensitive_OTUs_current){
+  data_per_OTU<-rumen_list[[match(focal_OTU,summary_rumen_OTUs$OTU)]]
+  current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
+  colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
+  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
+  
+  for (row in seq(1,nrow(data_per_OTU))){
+    subject<-as.character(data_per_OTU[row,"subjectID"])
+    arrival_time<-data_per_OTU[row,"arrival_time"]
+    persistence<-data_per_OTU[row,"persistence"]
+    current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & otus$t==arrival_time,5:2547])
+    current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+    current_comm_analysis[row,4:2547]<-current_community
+    }
+
+  focal<-match(OTU,colnames(current_comm_analysis))
+  current_comm_analysis<-current_comm_analysis[,-c(focal)]
+  current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+  
+  #convert to phyloseq object
+  #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
+  phyloseq_otu_table<-t(current_comm_analysis[,4:2546])
+  colnames(phyloseq_otu_table)<-current_comm_analysis$subject
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
+  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
+  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
+  
+  #2: taxonomy (remove OTUs that are not present in the OTU table)
+  phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
+  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$otu%in%setdiff(phyloseq_taxonomy$otu,colnames(current_comm_analysis[,4:2546])),]
+  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$otu),]
+  rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
+  phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
+
+  #3: sample info (add a discrete time variable, add rownames)
+  phyloseq_samples<-data.frame(current_comm_analysis[,c(1:3)])
+  rownames(phyloseq_samples)<-phyloseq_samples[,1]
+  phyloseq_samples<-phyloseq_samples[,-c(1)]
+  phyloseq_samples<-sample_data(phyloseq_samples)
+                                                            
+  #create a phyloseq object
+  phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
+  deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
+  deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
+  #extract significantly enriched/depleted taxa
+  res = results(deseq_output, cooksCutoff = FALSE)
+  sigtab = res[which(res$padj < 0.05), ]
+  sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(phyloseq_obj)[rownames(sigtab), ], "matrix"))
+  sigtab<-sigtab[order(-sigtab$log2FoldChange),]
+  sigtab$x<-seq(1,nrow(sigtab))
+  
+  #add focal OTU info and bind to master dataframe
+  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==OTU,3:8]
+  sigtab[,"focal_OTU"]<-focal_OTU
+  sigtab[,"focal_Phylum"]<-substr(taxonomy[1],4,nchar(taxonomy[1]))
+  sigtab[,"focal_Class"]<-substr(taxonomy[2],4,nchar(taxonomy[2]))
+  sigtab[,"focal_Order"]<-substr(taxonomy[3],4,nchar(taxonomy[3]))
+  sigtab[,"focal_Family"]<-substr(taxonomy[4],4,nchar(taxonomy[4]))
+  sigtab[,"focal_Genus"]<-substr(taxonomy[5],4,nchar(taxonomy[5]))
+  sigtab[,"focal_Species"]<-substr(taxonomy[6],4,nchar(taxonomy[6]))
+  rumen_current_deseq<-rbind(rumen_current_deseq,sigtab)
+}       
+        
+                                 
+##identify partner OTUs within the community before arrival (t=-1)                               
+rumen_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
+                                 
+#set up dataframe of community at arrival again (for the small number of sensitive OTUs)
+for (focal_OTU in rumen_sensitive_OTUs_prior){
+    data_per_OTU<-rumen_list[[match(focal_OTU,summary_rumen_OTUs$OTU)]]
+  
+    prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
+    colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
+    for (row in seq(1,nrow(data_per_OTU))){
+        subject<-as.character(data_per_OTU[row,"subjectID"])
+        arrival_time<-data_per_OTU[row,"arrival_time"]
+        persistence<-data_per_OTU[row,"persistence"]
+        
+        #in each host, find the last timepoint taken before arrival & extract community
+        comm_subset<-rumen_otus[rumen_otus$subject==subject,]
+        comm_subset<-comm_subset[order(comm_subset$t),]
+        if (match(arrival_time,comm_subset$t)>1){
+            prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
+            prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:2547])
+            prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+            prior_comm_analysis[row,4:2547]<-prior_community
+        }
+      }
+      
+    #remove focal OTU from community
+    prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
+    focal<-match(OTU,colnames(prior_comm_analysis))
+    prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
+    prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
+    prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
+  
+  #convert to phyloseq object
+  #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
+  phyloseq_otu_table<-t(prior_comm_analysis[,4:2546])
+  colnames(phyloseq_otu_table)<-prior_comm_analysis$subject
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
+  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
+  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
+  
+  #2: taxonomy (remove OTUs that are not present in the OTU table)
+  phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
+  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$otu%in%setdiff(phyloseq_taxonomy$otu,colnames(prior_comm_analysis[,4:2546])),]
+  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$otu),]
+  rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
+  phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
+
+  #3: sample info (add a discrete time variable, add rownames)
+  phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
+  rownames(phyloseq_samples)<-phyloseq_samples[,1]
+  phyloseq_samples<-phyloseq_samples[,-c(1)]
+  phyloseq_samples<-sample_data(phyloseq_samples)
+
+  #create a phyloseq object
+  phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
+  deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
+  deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
+  #extract significantly enriched/depleted taxa
+  res = results(deseq_output, cooksCutoff = FALSE)
+  sigtab = res[which(res$padj < 0.05), ]
+  sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(phyloseq_obj)[rownames(sigtab), ], "matrix"))
+  sigtab<-sigtab[order(-sigtab$log2FoldChange),]
+  sigtab$x<-seq(1,nrow(sigtab))
+  
+  #add focal OTU info and bind to master dataframe
+  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==OTU,3:8]
+  sigtab[,"focal_OTU"]<-focal_OTU
+  sigtab[,"focal_Phylum"]<-substr(taxonomy[1],4,nchar(taxonomy[1]))
+  sigtab[,"focal_Class"]<-substr(taxonomy[2],4,nchar(taxonomy[2]))
+  sigtab[,"focal_Order"]<-substr(taxonomy[3],4,nchar(taxonomy[3]))
+  sigtab[,"focal_Family"]<-substr(taxonomy[4],4,nchar(taxonomy[4]))
+  sigtab[,"focal_Genus"]<-substr(taxonomy[5],4,nchar(taxonomy[5]))
+  sigtab[,"focal_Species"]<-substr(taxonomy[6],4,nchar(taxonomy[6]))
+  rumen_current_deseq<-rbind(rumen_current_deseq,sigtab)
+}
+                                 
+                                 
 
