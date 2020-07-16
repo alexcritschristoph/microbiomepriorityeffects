@@ -189,7 +189,7 @@ for (OTU in humangut_OTU_list){
 
 sd_persist_med<-summary(summary_humangut_OTUs$sd_persistence)["Median"]
 
-tmp<-summary_humangut_OTUs[summary_humangut_OTUs$var_persistence>=var_persist_median,]
+tmp<-summary_humangut_OTUs[summary_humangut_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
 humangut_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"])
 
@@ -523,7 +523,22 @@ for (OTU in murine_OTU_list){
  
 }
 
-                                 
+
+##DESeq analysis of "partner" OTUs whose abundance at (t=0) or before (t=-1) arrival predicts persistence of "focal" OTU
+
+#to be detectably sensitive to microbiome composition, OTUs need to vary a lot in persistence
+#here I am considering the set of OTUs with variation in persistence (SD) above the median level-- but this could be adjusted
+
+sd_persist_med<-summary(summary_murine_OTUs$sd_persistence)["Median"]
+
+tmp<-summary_murine_OTUs[summary_murine_OTUs$sd_persistence>=sd_persist_med,]
+tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
+murine_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"])
+
+tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
+murine_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
+
+#None of these are significant after multiple testing correction, so I am stopping this analysis for now...
                                  
 -----------------------------------------------------------------------------------------------------------------------------------------                                  
    
