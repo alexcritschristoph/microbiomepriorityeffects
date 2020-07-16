@@ -174,7 +174,7 @@ for (OTU in humangut_OTU_list){
       persistence_pvalue_prior<-a$aov.tab[1,6]
   
       #iteratively update data frames
-      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
+      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
       humangut_list[[i]]<-data_per_OTU
       i=i+1
      }  
@@ -516,7 +516,7 @@ for (OTU in murine_OTU_list){
         }
       else {persistence_F_prior<-NA; persistence_pvalue_prior<-NA}
     
-      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
+      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
       murine_list[[i]]<-data_per_OTU
       i=i+1
   }
