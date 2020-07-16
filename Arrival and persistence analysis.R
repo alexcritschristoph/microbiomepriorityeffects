@@ -10,24 +10,6 @@ library(ape)
 library(vegan)
 getPalette=colorRampPalette(brewer.pal(9,"Set1"))
 
-##import OTU tables and OTU taxonomy
-#human data: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
-humangut_otus <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/otus.csv")
-humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/SILVA_taxonomy.csv")
-predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/predicted_trait_data.csv")
-#mouse data: OTU tables ("murine_otus"), taxonomic annotations ("murine_taxonomy")
-murine_otus<-read_csv("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_OTUs.csv")
-murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_taxonomy.xlsx")
-#cow data: OTU tables ("rumen_otus"), taxonomic annotations ("rumen_taxonomy")
-rumen_otus <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/rumen_OTUs.csv")
-rumen_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/Rumen gut taxonomy.csv")
-
-
-
-------------------------------------------------------------------------------------------------------
-
-
-
 ##This function creates a data frame of the relative abundances of OTU X in subject Y over time
 df_subset<-function(OTU_table,OTU_name,subject_name){
   otus_subset<-OTU_table[OTU_table$subject==subject_name,c("t","subject","sampleID",OTU_name)]
@@ -82,13 +64,20 @@ calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
 }
 
 
-
-------------------------------------------------------------------------------------------------------
-
+-----------------------------------------------------------------------------------------------------------------------------------------
 
 
+###Human gut microbiome data analysis
+###data from Guitar et al 2019, Nature Communications
 
-##Within each dataset, make a list of OTUs that are seen in at least 20% of hosts
+##import OTU tables and OTU taxonomy
+#human data: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
+humangut_otus <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/otus.csv")
+humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/SILVA_taxonomy.csv")
+predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/predicted_trait_data.csv")
+
+
+##Make a list of OTUs that are detected in at least 20% of hosts
 #human gut
 humangut_OTU_list<-c()
 for (OTU in colnames(humangut_otus)[5:2420]){ #loop through all OTUs detected at any point in the study (2416 OTUs)
@@ -99,36 +88,9 @@ for (OTU in colnames(humangut_otus)[5:2420]){ #loop through all OTUs detected at
   #consider this OTU only if it is present in 20% or more of individuals (11.2)
   #Final list includes 670 OTUs
 }
-#mouse gut
-murine_OTU_list<-c()
-for (OTU in colnames(murine_otus[5:3099])){ #loop through all OTUs detected at any point in the study (3095)
-  OTU_all_samples<-murine_otus[,c("subject",OTU)] #subset to this specific OTU
-  colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
-  if (length(unique(OTU_all_indiv$subject))>=3){murine_OTU_list<-c(murine_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
-  #consider this OTU only if it is present in 20% or more of individuals (2.4)
-  #Final list includes 971 OTUs
-}
-murine_otus<-murine_otus[murine_otus$t<300,] #remove the last time-point because there was a 6-month gap in sampling
-#cow gut
-rumen_OTU_list<-c()
-for (OTU in colnames(rumen_otus[4:2547])){ #loop through all OTUs detected at any point in the study (2544)
-  OTU_all_samples<-rumen_otus[,c("subject",OTU)] #subset to this specific OTU
-  colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
-  if (length(unique(OTU_all_indiv$subject))>=9){rumen_OTU_list<-c(rumen_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
-  #consider this OTU only if it is present in 20% or more of individuals (9)
-  #Final list includes 2544 OTUs (because the original study had already subsetted to OTUs present in 80% of individuals)
-  }
 
 
-
-------------------------------------------------------------------------------------------------------
-
-
-
-##identify OTUs that are sensitive to microbiome composition upon arrival (t=0)
-#human gut
+##identify OTUs that are sensitive to microbiome composition
 summary_humangut_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #this dataframe contains summary statistics of mean arrival time, mean persistence, and sensitivity to microbiome composition of each OTU
 humangut_list<-list() #each entry of this list contains the arrival time & persistence of the OTU in each host
 i=1
@@ -155,7 +117,7 @@ for (OTU in humangut_OTU_list){
   #if there are enough observations, test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
   if (num_hosts>=12 & sd(data_per_OTU$persistence)>0){
   
-      ##dependence on microbiome composition at arrival
+      ##dependence on microbiome composition at arrival (t=0)
       current_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
       colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
       for (row in seq(1,nrow(data_per_OTU))){
@@ -180,7 +142,7 @@ for (OTU in humangut_OTU_list){
       persistence_F<-a$aov.tab[1,4]
       persistence_pvalue<-a$aov.tab[1,6]
     
-      ##dependence on microbiome composition before arrival
+      ##dependence on microbiome composition before arrival (t=-1)
       prior_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
       colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
       for (row in seq(1,nrow(data_per_OTU))){
@@ -217,12 +179,6 @@ for (OTU in humangut_OTU_list){
       i=i+1
      }  
   }
-
-
-
-  
-----------------------------------------------------------------------------------------
-
 
 
 
@@ -384,11 +340,8 @@ for (focal_OTU in humangut_sensitive_OTUs_prior){
   sigtab[,"focal_Species"]<-focal_taxonomy[,"Species"]
   humangut_prior_deseq<-rbind(humangut_prior_deseq,sigtab)
 }
-                                 
-      
 
-----------------------------------------------------------------------------------------
-                                 
+
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the human gut microbiome
 #How many DESeq-identified pairs come from the same family? (t=-1)
 perm_means<-c()
@@ -453,23 +406,39 @@ print(length(perm_means[perm_means>=obs_means_neg]))
 obs_means_pos<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0,])
 print(length(perm_means[perm_means<=obs_means_pos]))
 #positive pairs from t=-1 are LESS closely related than expected by chance (0.01<p<0.05)                                 
+                                                                  
                                  
+-----------------------------------------------------------------------------------------------------------------------------------------                               
+                  
                                  
-                                 
-                                 
+###Mouse gut microbiome data analysis
+###Data from Kozich et al 2013, Applied and Environmental Microbiology
 
-----------------------------------------------------------------------------------------
-
+##Import OTU tables and OTU taxonomy
+murine_otus<-read_csv("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_OTUs.csv")
+murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_taxonomy.xlsx")
+                                                           
+##Make a list of OTUs that are detected in at least 20% of hosts
+murine_OTU_list<-c()
+for (OTU in colnames(murine_otus[5:3099])){ #loop through all OTUs detected at any point in the study (3095)
+  OTU_all_samples<-murine_otus[,c("subject",OTU)] #subset to this specific OTU
+  colnames(OTU_all_samples)<-c("subject","abundance")
+  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
+  if (length(unique(OTU_all_indiv$subject))>=3){murine_OTU_list<-c(murine_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
+  #consider this OTU only if it is present in 20% or more of individuals (2.4)
+  #Final list includes 971 OTUs
+}
+murine_otus<-murine_otus[murine_otus$t<300,] #remove the last time-point because there was a 6-month gap in sampling
                                  
-
-#mouse gut
-summary_murine_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #initialize a data frame for mean arrival times, mean persistence, and the arrival-persistence correlation for all the OTUs
-murine_list<-list()
+##identify OTUs that are sensitive to microbiome composition
+summary_murine_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #this dataframe contains summary statistics of mean arrival time, mean persistence, and sensitivity to microbiome composition of each OTU
+murine_list<-list() #each entry of this list contains the arrival time & persistence of the OTU in each host
 i=1
 
 for (OTU in murine_OTU_list){
-  data_per_OTU<-data.frame(matrix(nrow=0,ncol=4))
   
+  #generate a data frame with the arrival time & persistence of this OTU in each host
+  data_per_OTU<-data.frame(matrix(nrow=0,ncol=4))
   for (subjectID in levels(factor(murine_otus$subject))){
     otus_subset<-df_subset(murine_otus,OTU,subjectID)
     arrival_time<-calculate_arrival_time(otus_subset,OTU)
@@ -477,44 +446,109 @@ for (OTU in murine_OTU_list){
     data_per_OTU<-rbind(data_per_OTU,data.frame(OTU,subjectID,arrival_time,persistence))
   }
   
+  #calculate summary statistics; find taxonomy
   mean_arrival<-mean(data_per_OTU$arrival_time,na.rm=T)
   mean_persistence<-mean(data_per_OTU$persistence,na.rm=T)
+  sd_persistence<-sd(data_per_OTU$persistence,na.rm=T)
   num_hosts<-nrow(data_per_OTU[!is.na(data_per_OTU$persistence),])
   taxonomy<-murine_taxonomy[murine_taxonomy$OTU==OTU,c(5,7,9,11,13)]
   data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
 
+  #if there are enough observations, test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
   if (num_hosts>=3 & sd(data_per_OTU$persistence)>0){
+    
+      ##dependence on microbiome composition at arrival
       current_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
       colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
       for (row in seq(1,nrow(data_per_OTU))){
-          subject<-as.character(data_per_OTU[row,"subjectID"])
-          arrival_time<-data_per_OTU[row,"arrival_time"]
-          persistence<-data_per_OTU[row,"persistence"]
+         subject<-as.character(data_per_OTU[row,"subjectID"])
+         arrival_time<-data_per_OTU[row,"arrival_time"]
+         persistence<-data_per_OTU[row,"persistence"]
   
-          #extract current community, remove abundance of focal OTU
+          #extract community at arrival time in each host
           current_community<-data.frame(murine_otus[murine_otus$subject==subject & murine_otus$t==arrival_time,5:3099])
-    
           current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
           current_comm_analysis[row,4:3098]<-current_community
           }
-        current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
-        focal<-match(OTU,colnames(current_comm_analysis))
-        current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  
-      dist<-vegdist(current_comm_analysis[,3:3097], method="bray")
-      a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
-      persistence_F<-a$aov.tab[1,4]
-      persistence_pvalue<-a$aov.tab[1,6]
-  
     
-      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue))
+       #remove focal OTU from community
+       current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+       focal<-match(OTU,colnames(current_comm_analysis))
+       current_comm_analysis<-current_comm_analysis[,-c(focal)]
+  
+       #record results of adonis test
+       dist<-vegdist(current_comm_analysis[,3:3097], method="bray")
+       a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
+       persistence_F<-a$aov.tab[1,4]
+       persistence_pvalue<-a$aov.tab[1,6]
+    
+       ##dependence on microbiome composition before arrival
+       prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
+       colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
+       for (row in seq(1,nrow(data_per_OTU))){
+          subject<-as.character(data_per_OTU[row,"subjectID"])
+          arrival_time<-data_per_OTU[row,"arrival_time"]
+          persistence<-data_per_OTU[row,"persistence"]
+        
+          #in each host, find the last timepoint taken before arrival & extract community
+          comm_subset<-murine_otus[murine_otus$subject==subject,]
+          comm_subset<-comm_subset[order(comm_subset$t),]
+          if (match(arrival_time,comm_subset$t)>1){
+              prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
+              prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:3099])
+              prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
+              prior_comm_analysis[row,4:3098]<-prior_community
+          }
+      }
+    
+      #remove focal OTU from community
+      prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
+      focal<-match(OTU,colnames(prior_comm_analysis))
+      prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
+      prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
+  
+      #record results of adonis test
+      if (nrow(prior_comm_analysis[prior_comm_analysis$persistence!=1 & prior_comm_analysis$persistence!=0,])>2){
+          dist<-vegdist(prior_comm_analysis[,3:3097], method="bray")
+          a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
+          persistence_F_prior<-a$aov.tab[1,4]
+          persistence_pvalue_prior<-a$aov.tab[1,6]
+        }
+      else {persistence_F_prior<-NA; persistence_pvalue_prior<-NA}
+    
+      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
       murine_list[[i]]<-data_per_OTU
       i=i+1
   }
  
 }
 
+                                 
+                                 
+-----------------------------------------------------------------------------------------------------------------------------------------                                  
+   
+                                 
+###Cow rumen microbiome
+###Data from Furman et al 2020, Nature Communications
+                                                               
+##Import OTU tables and OTU taxonomy
+rumen_otus <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/rumen_OTUs.csv")
+rumen_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/Rumen gut taxonomy.csv")
 
+                                 
+##Make a list of OTUs that are detected in at least 20% of hosts
+rumen_OTU_list<-c()
+for (OTU in colnames(rumen_otus[4:2547])){ #loop through all OTUs detected at any point in the study (2544)
+  OTU_all_samples<-rumen_otus[,c("subject",OTU)] #subset to this specific OTU
+  colnames(OTU_all_samples)<-c("subject","abundance")
+  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
+  if (length(unique(OTU_all_indiv$subject))>=9){rumen_OTU_list<-c(rumen_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
+  #consider this OTU only if it is present in 20% or more of individuals (9)
+  #Final list includes 2544 OTUs (because the original study had already subsetted to OTUs present in 80% of individuals)
+  }
+                       
+
+##Identify OTUs that are sensitive to microbiome composition (needs to be updated)
 
 #cow gut
 
