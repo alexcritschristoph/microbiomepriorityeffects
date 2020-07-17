@@ -8,7 +8,8 @@ library(RColorBrewer)
 library(gridExtra)
 library(ape)
 library(vegan)
-getPalette=colorRampPalette(brewer.pal(9,"Set1"))
+library(phyloseq)
+library(DESeq2)
 
 ##This function creates a data frame of the relative abundances of OTU X in subject Y over time
 df_subset<-function(OTU_table,OTU_name,subject_name){
@@ -376,7 +377,7 @@ print(length(perm_means[perm_means<=obs_means_pos]))
 #positive pairs from arrival (t=0) are MORE closely related than expected by chance (p<0.001)                                
                                  
 #How many DESeq-identified pairs come from the same family? (t=-1)
-perm_means<-c()
+perm_means_humangut<-c()
 all_pairs<-combn(as.character(summary_humangut_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
 for (i in seq(1,1000)){
   print(i)
@@ -396,17 +397,9 @@ for (i in seq(1,1000)){
     }
   }
   null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  perm_means<-c(perm_means,mean(null_relatedness_data$relatedness,na.rm=T))
+  perm_means_humangut<-c(perm_means_humangut,mean(null_relatedness_data$relatedness,na.rm=T))
 }
-
-obs_means_neg<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0,])
-print(length(perm_means[perm_means>=obs_means_neg]))
-#negative pairs from t=-1 are MORE closely related than expected by chance (0.01<p<0.05)
-                                 
-obs_means_pos<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0,])
-print(length(perm_means[perm_means<=obs_means_pos]))
-#positive pairs from t=-1 are LESS closely related than expected by chance (0.01<p<0.05)                                 
-                                                                  
+                                                                
                                  
 -----------------------------------------------------------------------------------------------------------------------------------------                               
                   
