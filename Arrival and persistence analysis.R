@@ -345,7 +345,7 @@ for (focal_OTU in humangut_sensitive_OTUs_prior){
 
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the human gut microbiome
 #How many DESeq-identified pairs come from the same family? (t=-1)
-perm_means<-c()
+humangut_perm_current<-c()
 all_pairs<-combn(as.character(summary_humangut_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
 for (i in seq(1,1000)){
   print(i)
@@ -365,19 +365,22 @@ for (i in seq(1,1000)){
     }
   }
   null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  perm_means<-c(perm_means,mean(null_relatedness_data$relatedness,na.rm=T))
+  humangut_perm_current<-c(humangut_perm_current,mean(null_relatedness_data$relatedness,na.rm=T))
 }
 
-obs_means_neg<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0,])
-print(length(perm_means[perm_means<=obs_means_neg]))
-#negative pairs from arrival (t=0) are LESS closely related than expected by chance (p<0.001)
+obs_means_neg<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified" & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified",])
+print(length(humangut_perm_current[humangut_perm_current<=obs_means_neg])/1000)
+print(length(humangut_perm_current[humangut_perm_current>=obs_means_neg])/1000)
+
                                  
-obs_means_pos<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange>0 & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange>0,])
-print(length(perm_means[perm_means<=obs_means_pos]))
-#positive pairs from arrival (t=0) are MORE closely related than expected by chance (p<0.001)                                
+obs_means_pos<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange>0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified" & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange>0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified",])
+print(length(humangut_perm_current[humangut_perm_current<=obs_means_pos])/1000)
+print(length(humangut_perm_current[humangut_perm_current>=obs_means_pos])/1000)
+
+#positive pairs from arrival (t=0) are slightly MORE closely related than expected by chance (p=0.032)                               
                                  
 #How many DESeq-identified pairs come from the same family? (t=-1)
-perm_means_humangut<-c()
+humangut_perm_prior<-c()
 all_pairs<-combn(as.character(summary_humangut_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
 for (i in seq(1,1000)){
   print(i)
@@ -397,8 +400,19 @@ for (i in seq(1,1000)){
     }
   }
   null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  perm_means_humangut<-c(perm_means_humangut,mean(null_relatedness_data$relatedness,na.rm=T))
+  humangut_perm_prior<-c(humangut_perm_prior,mean(null_relatedness_data$relatedness,na.rm=T))
 }
+                                 
+obs_means_neg<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified" & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified",])
+print(length(humangut_perm_prior[humangut_perm_prior<=obs_means_neg])/1000)
+print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_neg])/1000)
+                                 
+#negative pairs from the time before arrival (t=-1) are MORE closely related than expected by chance (p=0.001)
+                                 
+obs_means_pos<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified" & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified",])
+print(length(humangut_perm_prior[humangut_perm_prior<=obs_means_pos])/1000)
+print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_pos])/1000)
+                             
                                                                 
                                  
 -----------------------------------------------------------------------------------------------------------------------------------------                               
