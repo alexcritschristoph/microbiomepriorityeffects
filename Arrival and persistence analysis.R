@@ -914,7 +914,7 @@ print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_neg])/1000)
 print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_neg])/1000)
 
                                  
-obs_means_neg<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
-print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_neg])/1000)
-print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_neg])/1000)
+obs_means_pos<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
+print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_pos])/1000)
+print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_pos])/1000)
 
