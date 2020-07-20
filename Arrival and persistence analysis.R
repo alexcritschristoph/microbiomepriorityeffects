@@ -850,5 +850,71 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   rumen_prior_deseq<-rbind(rumen_prior_deseq,sigtab)
 }
                                  
+##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the cow rumen microbiome
+#How many DESeq-identified pairs come from the same family? (t=-1)
+rumen_perm_current<-c()
+all_pairs<-combn(as.character(summary_rumen_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
+for (i in seq(1,1000)){
+  print(i)
+  null_relatedness_data<-data.frame(matrix(nrow=nrow(rumen_current_deseq),ncol=5))
+  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
+  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(rumen_current_deseq))] #randomly sample the same number of pairs as in the observe data
+
+  for (j in seq(1,nrow(rumen_current_deseq))){
+    OTU_A<-sampled_pairs[1,j]
+    family_A<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_A,6])
+    OTU_B<-sampled_pairs[2,j]
+    family_B<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_B,6])
+
+    if (!is.na(family_A) & !is.na(family_B) & substr(family_A,4,5)!="" & substr(family_B,4,5)!=""){
+    relatedness<-as.numeric(family_A==family_B)
+    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
+    }
+  }
+  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
+  rumen_perm_current<-c(rumen_perm_current,mean(null_relatedness_data$relatedness,na.rm=T))
+}
+
+obs_means_neg<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange<0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange<0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
+print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
+print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
+
                                  
+obs_means_neg<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
+print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
+print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
+
+                                 
+#How many DESeq-identified pairs come from the same family? (t=-1)
+rumen_perm_prior<-c()
+all_pairs<-combn(as.character(summary_rumen_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
+for (i in seq(1,1000)){
+  print(i)
+  null_relatedness_data<-data.frame(matrix(nrow=nrow(rumen_prior_deseq),ncol=5))
+  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
+  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(rumen_prior_deseq))] #randomly sample the same number of pairs as in the observe data
+
+  for (j in seq(1,nrow(rumen_prior_deseq))){
+    OTU_A<-sampled_pairs[1,j]
+    family_A<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_A,6])
+    OTU_B<-sampled_pairs[2,j]
+    family_B<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_B,6])
+
+    if (!is.na(family_A) & !is.na(family_B) & substr(family_A,4,5)!="" & substr(family_B,4,5)!=""){
+    relatedness<-as.numeric(family_A==family_B)
+    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
+    }
+  }
+  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
+  rumen_perm_prior<-c(rumen_perm_prior,mean(null_relatedness_data$relatedness,na.rm=T))
+}
+                                 
+obs_means_neg<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange<0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange<0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
+print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_neg])/1000)
+print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_neg])/1000)
+
+                                 
+obs_means_neg<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
+print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_neg])/1000)
+print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_neg])/1000)
 
