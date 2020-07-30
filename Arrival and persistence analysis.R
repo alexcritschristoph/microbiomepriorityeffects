@@ -768,8 +768,8 @@ print(length(murine_perm_prior[murine_perm_prior>=obs_means_neg])/1000)
 
                                  
 obs_means_pos<-nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange>0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified"  & murine_prior_deseq$focal_Family==murine_prior_deseq$Family,])/nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange>0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified",])
-print(length(murine_perm_current[murine_perm_current<=obs_means_pos])/1000)
-print(length(murine_perm_current[murine_perm_current>=obs_means_pos])/1000)
+print(length(murine_perm_prior[murine_perm_prior<=obs_means_pos])/1000)
+print(length(murine_perm_prior[murine_perm_prior>=obs_means_pos])/1000)
 
 -----------------------------------------------------------------------------------------------------------------------------------------                                  
    
@@ -1104,7 +1104,7 @@ print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
 print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
 
                                  
-obs_means_neg<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
+obs_means_pos<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
 print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
 print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
 
