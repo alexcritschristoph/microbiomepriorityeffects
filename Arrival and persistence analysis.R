@@ -10,6 +10,7 @@ library(ape)
 library(vegan)
 library(phyloseq)
 library(DESeq2)
+library(dplyr)
 
 ##This function creates a data frame of the relative abundances of OTU X in subject Y over time
 df_subset<-function(OTU_table,OTU_name,subject_name){
