@@ -1016,7 +1016,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
       
     #remove focal OTU from community
     prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-    focal<-match(OTU,colnames(prior_comm_analysis))
+    focal<-match(focal_OTU,colnames(prior_comm_analysis))
     prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
     prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
     prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
@@ -1032,7 +1032,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
   phyloseq_taxonomy<-data.frame(rumen_taxonomy)
-  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$X1%in%setdiff(phyloseq_taxonomy$X1,colnames(current_comm_analysis[,4:2546])),]
+  phyloseq_taxonomy<-phyloseq_taxonomy[intersect(phyloseq_taxonomy$X1,colnames(prior_comm_analysis[,4:2546])),]
   phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$X1),]
   colnames(phyloseq_taxonomy)[2:8]=c("Domain","Phylum","Class","Order","Family","Genus","Species")
   phyloseq_taxonomy$Domain<-substr(phyloseq_taxonomy$Domain,4,nchar(phyloseq_taxonomy$Domain))
@@ -1046,7 +1046,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
 
   #3: sample info (add rownames)
-  phyloseq_samples<-data.frame(current_comm_analysis[,c(1:3)])
+  phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
   phyloseq_samples$subject<-paste("X",phyloseq_samples$subject,sep="")
   rownames(phyloseq_samples)<-phyloseq_samples[,1]
   phyloseq_samples<-phyloseq_samples[,-c(1)]
