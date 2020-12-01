@@ -202,12 +202,18 @@ tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 humangut_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
 
+humangut_list_index<-data.frame(matrix(nrow=0,ncol=2))
+for (listitem in seq(1,length(humangut_list))){
+  OTU<-as.character(humangut_list[[listitem]][1,1])
+  humangut_list_index[listitem,]=c(listitem,OTU)
+}
+
 ##identify partner OTUs within the community at arrival (t=0)
 humangut_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in humangut_sensitive_OTUs_current){
-  data_per_OTU<-humangut_list[[match(focal_OTU,summary_humangut_OTUs$OTU)]]
+  data_per_OTU<-humangut_list[[match(focal_OTU,humangut_list_index$X2)]]
   current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2419))
   colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
   data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
@@ -277,7 +283,7 @@ humangut_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
                                  
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in humangut_sensitive_OTUs_prior){
-    data_per_OTU<-humangut_list[[match(focal_OTU,summary_humangut_OTUs$OTU)]]
+    data_per_OTU<-humangut_list[[match(focal_OTU,humangut_list_index$X2)]]
     prior_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
     colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
     data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
@@ -555,13 +561,20 @@ murine_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OT
 murine_sensitive_OTUs_current<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue),"OTU"]
 murine_sensitive_OTUs_prior<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue_prior<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue_prior),"OTU"]
                                  
-                                 
+
+murine_list_index<-data.frame(matrix(nrow=0,ncol=2))
+for (listitem in seq(1,length(murine_list))){
+  OTU<-as.character(murine_list[[listitem]][1,1])
+  murine_list_index[listitem,]=c(listitem,OTU)
+}
+
+                                   
 ##identify partner OTUs within the community at arrival (t=0)
 murine_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in murine_sensitive_OTUs_current){
-  data_per_OTU<-murine_list[[match(focal_OTU,summary_murine_OTUs$OTU)]]
+  data_per_OTU<-murine_list[[match(focal_OTU,murine_list_index$X2)]]
   current_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
   colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
   data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
@@ -575,7 +588,7 @@ for (focal_OTU in murine_sensitive_OTUs_current){
     current_comm_analysis[row,4:3098]<-current_community
     }
 
-  focal<-match(OTU,colnames(current_comm_analysis))
+  focal<-match(focal_OTU,colnames(current_comm_analysis))
   current_comm_analysis<-current_comm_analysis[,-c(focal)]
   current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
   
@@ -631,7 +644,7 @@ murine_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
 
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in murine_sensitive_OTUs_prior){
-  data_per_OTU<-murine_list[[match(focal_OTU,summary_murine_OTUs$OTU)]]
+  data_per_OTU<-murine_list[[match(focal_OTU,murine_list_index$X2)]]
   prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
   colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
   data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
@@ -655,7 +668,7 @@ for (focal_OTU in murine_sensitive_OTUs_prior){
     
      #remove focal OTU from community
      prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-     focal<-match(OTU,colnames(prior_comm_analysis))
+     focal<-match(focal_OTU,colnames(prior_comm_analysis))
      prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
      prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
   
@@ -684,7 +697,7 @@ for (focal_OTU in murine_sensitive_OTUs_prior){
   #create a phyloseq object
   phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
   deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
-  deseq_output<-DESeq(deseq_test, test="Wald", fitType="mean")
+  deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
   #extract significantly enriched/depleted taxa
   res = results(deseq_output, cooksCutoff = FALSE)
   sigtab = res[which(res$padj < 0.05), ]
@@ -913,12 +926,18 @@ rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])$OT
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])$OTU
 
+rumen_list_index<-data.frame(matrix(nrow=0,ncol=2))
+for (listitem in seq(1,length(rumen_list))){
+  OTU<-as.character(rumen_list[[listitem]][1,1])
+  rumen_list_index[listitem,]=c(listitem,OTU)
+}                                 
+                                 
 ##identify partner OTUs within the community at arrival (t=0)
 rumen_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in rumen_sensitive_OTUs_current){
-  data_per_OTU<-rumen_list[[match(focal_OTU,summary_rumen_OTUs$OTU)]]
+  data_per_OTU<-rumen_list[[match(focal_OTU,rumen_list_index$X2)]]
   current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
   colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
   data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
@@ -932,7 +951,7 @@ for (focal_OTU in rumen_sensitive_OTUs_current){
     current_comm_analysis[row,4:2547]<-current_community
     }
 
-  focal<-match(OTU,colnames(current_comm_analysis))
+  focal<-match(focal_OTU,colnames(current_comm_analysis))
   current_comm_analysis<-current_comm_analysis[,-c(focal)]
   current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
   
@@ -996,7 +1015,7 @@ rumen_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
                                  
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in rumen_sensitive_OTUs_prior){
-    data_per_OTU<-rumen_list[[match(focal_OTU,summary_rumen_OTUs$OTU)]]
+    data_per_OTU<-rumen_list[[match(focal_OTU,rumen_list_index$X2)]]
     prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
     colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
     data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
