@@ -921,10 +921,10 @@ sd_persist_med<-summary(summary_rumen_OTUs$sd_persistence)["Median"]
 
 tmp<-summary_rumen_OTUs[summary_rumen_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
-rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])$OTU
+rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])
 
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
-rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])$OTU
+rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
 rumen_list_index<-data.frame(matrix(nrow=0,ncol=2))
 for (listitem in seq(1,length(rumen_list))){
