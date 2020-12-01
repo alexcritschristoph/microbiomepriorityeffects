@@ -1032,6 +1032,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
   phyloseq_taxonomy<-data.frame(rumen_taxonomy)
+  rownames(phyloseq_taxonomy)<-phyloseq_taxonomy$X1                               
   phyloseq_taxonomy<-phyloseq_taxonomy[intersect(phyloseq_taxonomy$X1,colnames(prior_comm_analysis[,4:2546])),]
   phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$X1),]
   colnames(phyloseq_taxonomy)[2:8]=c("Domain","Phylum","Class","Order","Family","Genus","Species")
