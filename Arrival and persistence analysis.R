@@ -617,7 +617,7 @@ for (focal_OTU in murine_sensitive_OTUs_current){
   #create a phyloseq object
   phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
   deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
-  deseq_output<-DESeq(deseq_test, test="Wald", fitType="mean")
+  deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
   #extract significantly enriched/depleted taxa
   res = results(deseq_output, cooksCutoff = FALSE)
   sigtab = res[which(res$padj < 0.05), ]
