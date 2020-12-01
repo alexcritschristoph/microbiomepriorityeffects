@@ -170,10 +170,13 @@ for (OTU in humangut_OTU_list){
       prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
     
       #record results of adonis test
-      dist<-vegdist(prior_comm_analysis[,4:2418], method="bray")
-      a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
-      persistence_F_prior<-a$aov.tab[1,4]
-      persistence_pvalue_prior<-a$aov.tab[1,6]
+      if (nrow(prior_comm_analysis[prior_comm_analysis$persistence!=1 & prior_comm_analysis$persistence!=0,])>2){   
+          dist<-vegdist(prior_comm_analysis[,4:2418], method="bray")
+          a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
+          persistence_F_prior<-a$aov.tab[1,4]
+          persistence_pvalue_prior<-a$aov.tab[1,6]
+        }
+      else {persistence_F_prior<-NA; persistence_pvalue_prior<-NA}
   
       #iteratively update data frames
       summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
