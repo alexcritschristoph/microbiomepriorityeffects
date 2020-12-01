@@ -222,7 +222,7 @@ for (focal_OTU in humangut_sensitive_OTUs_current){
     current_comm_analysis[row,4:2419]<-current_community
     }
 
-  focal<-match(OTU,colnames(current_comm_analysis))
+  focal<-match(focal_OTU,colnames(current_comm_analysis))
   current_comm_analysis<-current_comm_analysis[,-c(focal)]
   current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
 
@@ -297,7 +297,7 @@ for (focal_OTU in humangut_sensitive_OTUs_prior){
     }
   
     prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-    focal<-match(OTU,colnames(prior_comm_analysis))
+    focal<-match(focal_OTU,colnames(prior_comm_analysis))
     prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
     prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
   
