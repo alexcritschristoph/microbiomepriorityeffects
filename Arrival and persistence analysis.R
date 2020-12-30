@@ -12,6 +12,18 @@ library(phyloseq)
 library(DESeq2)
 library(dplyr)
 
+##Make a list of OTUs detected in at least 20% of hosts
+make_otu_list<-function(OTU_table,all_otus,subject_list){
+  subset_otus<-c()
+  for (OTU in all_otus){
+    OTU_all_samples<-OTU_table[,c("subject",OTU)] #subset to this specific OTU
+    colnames(OTU_all_samples)<-c("subject","abundance")
+    OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
+    if (length(unique(OTU_all_indiv$subject))>=0.2*length(subject_list)){subset_otus<-c(subset_otus,OTU)} #count the number of unique hosts in which this OTU had non-zero abundance for any amount of time
+  }
+  return(subset_otus)
+}
+
 ##This function creates a data frame of the relative abundances of OTU X in subject Y over time
 df_subset<-function(OTU_table,OTU_name,subject_name){
   otus_subset<-OTU_table[OTU_table$subject==subject_name,c("t","subject","sampleID",OTU_name)]
@@ -79,17 +91,10 @@ humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data
 predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/predicted_trait_data.csv")
 
 
-##Make a list of OTUs that are detected in at least 20% of hosts
-#human gut
-humangut_OTU_list<-c()
-for (OTU in colnames(humangut_otus)[5:2420]){ #loop through all OTUs detected at any point in the study (2416 OTUs)
-  OTU_all_samples<-humangut_otus[,c("subject",OTU)] #subset to this specific OTU
-  colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
-  if (length(unique(OTU_all_indiv$subject))>=12){humangut_OTU_list<-c(humangut_OTU_list,OTU)} #count the number of unique infant hosts in which this OTU had non-zero abundance for any amount of time
-  #consider this OTU only if it is present in 20% or more of individuals (11.2)
-  #Final list includes 670 OTUs
-}
+##Make a list of OTUs that are detected in at least 12 individuals (670 OTUs)
+humangut_otu_names<-colnames(humangut_otus)[5:2420]
+humangut_subject_names<-unique(humangut_otus$subject)
+humangut_OTU_list<-make_otu_list(humangut_otus,humangut_otu_names,humangut_subject_names)
 
 
 ##identify OTUs that are sensitive to microbiome composition
@@ -433,19 +438,15 @@ print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_pos])/1000)
 
 ##Import OTU tables and OTU taxonomy
 murine_otus<-read_csv("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_OTUs.csv")
-murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_taxonomy.xlsx")
-                                                           
-##Make a list of OTUs that are detected in at least 20% of hosts
-murine_OTU_list<-c()
-for (OTU in colnames(murine_otus[5:3099])){ #loop through all OTUs detected at any point in the study (3095)
-  OTU_all_samples<-murine_otus[,c("subject",OTU)] #subset to this specific OTU
-  colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
-  if (length(unique(OTU_all_indiv$subject))>=3){murine_OTU_list<-c(murine_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
-  #consider this OTU only if it is present in 20% or more of individuals (2.4)
-  #Final list includes 971 OTUs
-}
 murine_otus<-murine_otus[murine_otus$t<300,] #remove the last time-point because there was a 6-month gap in sampling
+murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_taxonomy.xlsx")
+ 
+                                 
+##Make a list of OTUs that were detected in at least 3 individuals (971 OTUs)
+murine_otu_names<-colnames(murine_otus)[5:3099]
+murine_subject_names<-unique(murine_otus$subject)
+murine_OTU_list<-make_otu_list(murine_otus,murine_otu_names,murine_subject_names)
+                               
                                  
 ##identify OTUs that are sensitive to microbiome composition
 summary_murine_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #this dataframe contains summary statistics of mean arrival time, mean persistence, and sensitivity to microbiome composition of each OTU
@@ -799,16 +800,10 @@ rumen_otus <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/rumen_
 rumen_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Rumen gut data/Rumen gut taxonomy.csv")
 
                                  
-##Make a list of OTUs that are detected in at least 20% of hosts
-rumen_OTU_list<-c()
-for (OTU in colnames(rumen_otus[4:2547])){ #loop through all OTUs detected at any point in the study (2544)
-  OTU_all_samples<-rumen_otus[,c("subject",OTU)] #subset to this specific OTU
-  colnames(OTU_all_samples)<-c("subject","abundance")
-  OTU_all_indiv<-OTU_all_samples[OTU_all_samples$abundance>0,] #subset to samples in which this OTU had non-zero abundance
-  if (length(unique(OTU_all_indiv$subject))>=9){rumen_OTU_list<-c(rumen_OTU_list,OTU)} #count the number of unique individuals in which this OTU had non-zero abundance for any amount of time
-  #consider this OTU only if it is present in 20% or more of individuals (9)
-  #Final list includes 2544 OTUs (because the original study had already subsetted to OTUs present in 80% of individuals)
-  }
+##Make a list of OTUs that were detected in at least 9 individuals (2544 OTUs)
+rumen_otu_names<-colnames(rumen_otus)[4:2547]
+rumen_subject_names<-unique(rumen_otus$subject)
+rumen_OTU_list<-make_otu_list(rumen_otus,rumen_otu_names,rumen_subject_names)
                        
 
 ##Identify OTUs that are sensitive to microbiome composition
