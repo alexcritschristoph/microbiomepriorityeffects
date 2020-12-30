@@ -12,7 +12,7 @@ library(phyloseq)
 library(DESeq2)
 library(dplyr)
 
-##Make a list of OTUs detected in at least 20% of hosts
+##This function makes a list of OTUs detected in at least 20% of hosts
 make_otu_list<-function(OTU_table,all_otus,subject_list){
   subset_otus<-c()
   for (OTU in all_otus){
@@ -77,6 +77,54 @@ calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
   }
 }
 
+##This function returns the time of the sample immediately before a given "arrival time"
+find_prev_timepoint<-function(OTU_table,subject,arrival_time){
+  comm_subset<-OTU_table[OTU_table$subject==subject,]
+  comm_subset<-comm_subset[order(comm_subset$t),]
+  if (match(arrival_time,comm_subset$t)>1){
+    return(as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"]))
+  }
+  else {return(NA)}
+}
+
+comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
+  #set up data frame with the community at (t=0) or before (t=-1) arrival in each subject
+  comm_composition<-data.frame(matrix(nrow=0,ncol=(length(all_otu_names)+3)))
+  colnames(comm_composition)=c("subject","arrival_time","persistence",all_otu_names)
+  for (row in seq(1,nrow(data_per_OTU))){
+    subject<-as.character(data_per_OTU[row,"subjectID"])
+    arrival_time<-data_per_OTU[row,"arrival_time"]
+    persistence<-data_per_OTU[row,"persistence"]
+    
+    if (time==0){search_time<-arrival_time}
+    else if (time==-1){search_time<-find_prev_timepoint(OTU_table,subject,arrival_time)}
+    
+    if (!is.na(search_time)){
+    comm_composition[row,1:3]<-c(subject,arrival_time,persistence)
+    community<-as.numeric(OTU_table[OTU_table$subject==subject & OTU_table$t==search_time,all_otu_names])
+    comm_composition[row,4:(ncol(comm_composition))]<-community
+    }
+  }
+
+    #remove focal OTU from community
+    comm_composition<-comm_composition[!is.na(comm_composition$arrival_time),]
+    comm_composition$persistence<-as.numeric(comm_composition$persistence)
+    focal<-match(data_per_OTU[1,1],colnames(comm_composition))
+    comm_composition<-comm_composition[,-c(focal)]
+
+
+    #PERMANOVA test
+    if (var(comm_composition$persistence)>0 & nrow(comm_composition)>2){
+      set.seed(123)
+      dist<-vegdist(comm_composition[,-c(1:3)],method="bray")
+      a<-adonis(dist~persistence,permutations=1000,comm_composition)
+      a_pvalue<-a$aov.tab[1,6]
+      return(a_pvalue)
+    }
+    else {return(NA)}
+}
+
+
 
 -----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -124,67 +172,10 @@ for (OTU in humangut_OTU_list){
   #if there are enough observations, test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
   if (num_hosts>=12 & sd(data_per_OTU$persistence)>0){
   
-      ##dependence on microbiome composition at arrival (t=0)
-      current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2419))
-      colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
-      for (row in seq(1,nrow(data_per_OTU))){
-          subject<-as.character(data_per_OTU[row,"subjectID"])
-          arrival_time<-data_per_OTU[row,"arrival_time"]
-          persistence<-data_per_OTU[row,"persistence"]
-  
-          #extract community at arrival time in each host
-          current_community<-data.frame(otus[otus$subject==subject & otus$t==arrival_time,5:2420])
-          current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-          current_comm_analysis[row,4:2419]<-current_community
-          }
-    
-      #remove focal OTU from community
-      current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
-      focal<-match(OTU,colnames(current_comm_analysis))
-      current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  
-      #record results of adonis test
-      dist<-vegdist(current_comm_analysis[,4:2418], method="bray")
-      a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
-      persistence_F<-a$aov.tab[1,4]
-      persistence_pvalue<-a$aov.tab[1,6]
-    
-      ##dependence on microbiome composition before arrival (t=-1)
-      prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2419))
-      colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
-      for (row in seq(1,nrow(data_per_OTU))){
-          subject<-as.character(data_per_OTU[row,"subjectID"])
-          arrival_time<-data_per_OTU[row,"arrival_time"]
-          persistence<-data_per_OTU[row,"persistence"]
-        
-          #in each host, find the last timepoint taken before arrival & extract community
-          comm_subset<-otus[otus$subject==subject,]
-          comm_subset<-comm_subset[order(comm_subset$t),]
-          if (match(arrival_time,comm_subset$t)>1){
-              prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
-              prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:2420])
-              prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-              prior_comm_analysis[row,4:2419]<-prior_community
-          }
-       }
-    
-      #remove focal OTU from community
-      prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-      focal<-match(OTU,colnames(prior_comm_analysis))
-      prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
-      prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
-    
-      #record results of adonis test
-      if (nrow(prior_comm_analysis[prior_comm_analysis$persistence!=1 & prior_comm_analysis$persistence!=0,])>2){   
-          dist<-vegdist(prior_comm_analysis[,4:2418], method="bray")
-          a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
-          persistence_F_prior<-a$aov.tab[1,4]
-          persistence_pvalue_prior<-a$aov.tab[1,6]
-        }
-      else {persistence_F_prior<-NA; persistence_pvalue_prior<-NA}
-  
+      persistence_pvalue<-comm_composition_test(OTU_table = humangut_otus,all_otu_names = humangut_otu_names,data_per_OTU = data_per_OTU,time = 0)
+      persistence_pvalue_prior<-comm_composition_test(OTU_table = humangut_otus,all_otu_names = humangut_otu_names,data_per_OTU = data_per_OTU,time = -1)
       #iteratively update data frames
-      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
+      summary_humangut_OTUs<-rbind(summary_humangut_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_pvalue,persistence_pvalue_prior))
       humangut_list[[i]]<-data_per_OTU
       i=i+1
      }  
@@ -475,66 +466,10 @@ for (OTU in murine_OTU_list){
   #if there are enough observations, test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
   if (num_hosts>=3 & sd(data_per_OTU$persistence)>0){
     
-      ##dependence on microbiome composition at arrival
-      current_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
-      colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
-      for (row in seq(1,nrow(data_per_OTU))){
-         subject<-as.character(data_per_OTU[row,"subjectID"])
-         arrival_time<-data_per_OTU[row,"arrival_time"]
-         persistence<-data_per_OTU[row,"persistence"]
-  
-          #extract community at arrival time in each host
-          current_community<-data.frame(murine_otus[murine_otus$subject==subject & murine_otus$t==arrival_time,5:3099])
-          current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-          current_comm_analysis[row,4:3098]<-current_community
-          }
+      persistence_pvalue<-comm_composition_test(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time = 0)
+      persistence_pvalue_prior<-comm_composition_test(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time = -1)
     
-       #remove focal OTU from community
-       current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
-       focal<-match(OTU,colnames(current_comm_analysis))
-       current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  
-       #record results of adonis test
-       dist<-vegdist(current_comm_analysis[,3:3097], method="bray")
-       a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
-       persistence_F<-a$aov.tab[1,4]
-       persistence_pvalue<-a$aov.tab[1,6]
-    
-       ##dependence on microbiome composition before arrival
-       prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
-       colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
-       for (row in seq(1,nrow(data_per_OTU))){
-          subject<-as.character(data_per_OTU[row,"subjectID"])
-          arrival_time<-data_per_OTU[row,"arrival_time"]
-          persistence<-data_per_OTU[row,"persistence"]
-        
-          #in each host, find the last timepoint taken before arrival & extract community
-          comm_subset<-murine_otus[murine_otus$subject==subject,]
-          comm_subset<-comm_subset[order(comm_subset$t),]
-          if (match(arrival_time,comm_subset$t)>1){
-              prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
-              prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:3099])
-              prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-              prior_comm_analysis[row,4:3098]<-prior_community
-          }
-      }
-    
-      #remove focal OTU from community
-      prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-      focal<-match(OTU,colnames(prior_comm_analysis))
-      prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
-      prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
-  
-      #record results of adonis test
-      if (nrow(prior_comm_analysis[prior_comm_analysis$persistence!=1 & prior_comm_analysis$persistence!=0,])>2){
-          dist<-vegdist(prior_comm_analysis[,3:3097], method="bray")
-          a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
-          persistence_F_prior<-a$aov.tab[1,4]
-          persistence_pvalue_prior<-a$aov.tab[1,6]
-        }
-      else {persistence_F_prior<-NA; persistence_pvalue_prior<-NA}
-    
-      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
+      summary_murine_OTUs<-rbind(summary_murine_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_pvalue,persistence_pvalue_prior))
       murine_list[[i]]<-data_per_OTU
       i=i+1
   }
@@ -839,68 +774,12 @@ for (OTU in rumen_OTU_list){
   
   #Test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
     if (num_hosts>=9 & sd(data_per_OTU$persistence)>0){
-      
-      ##dependence on microbiome composition at arrival (t=0)
-      current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
-      colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
-      for (row in seq(1,nrow(data_per_OTU))){
-          subject<-as.character(data_per_OTU[row,"subjectID"])
-          arrival_time<-data_per_OTU[row,"arrival_time"]
-          persistence<-data_per_OTU[row,"persistence"]
-  
-          #extract community at arrival time in each host
-          current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & rumen_otus$t==arrival_time,5:2547])
-          current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-          current_comm_analysis[row,4:2547]<-current_community
-          }
-      
-      #remove focal OTU from community
-      current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
-      focal<-match(OTU,colnames(current_comm_analysis))
-      current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  
-      #record results of adonis test
-      dist<-vegdist(current_comm_analysis[,3:2546], method="bray")
-      a<-adonis(dist~persistence,permutations=1000,data=current_comm_analysis)
-      persistence_F<-a$aov.tab[1,4]
-      persistence_pvalue<-a$aov.tab[1,6]
-      
-      ##dependence on microbiome composition before arrival (t=-1)
-      prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
-      colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
-      for (row in seq(1,nrow(data_per_OTU))){
-          subject<-as.character(data_per_OTU[row,"subjectID"])
-          arrival_time<-data_per_OTU[row,"arrival_time"]
-          persistence<-data_per_OTU[row,"persistence"]
-        
-          #in each host, find the last timepoint taken before arrival & extract community
-          comm_subset<-rumen_otus[rumen_otus$subject==subject,]
-          comm_subset<-comm_subset[order(comm_subset$t),]
-          if (match(arrival_time,comm_subset$t)>1){
-              prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
-              prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:2547])
-              prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-              prior_comm_analysis[row,4:2547]<-prior_community
-          }
-       }
-      
-      #remove focal OTU from community
-      prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-      focal<-match(OTU,colnames(prior_comm_analysis))
-      prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
-      prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
-      
-      #record results of adonis test
-      if (nrow(prior_comm_analysis[prior_comm_analysis$persistence!=1 & prior_comm_analysis$persistence!=0,])>2){
-          dist<-vegdist(prior_comm_analysis[,3:2546], method="bray")
-          a<-adonis(dist~persistence,permutations=1000,data=prior_comm_analysis)
-          persistence_F_prior<-a$aov.tab[1,4]
-          persistence_pvalue_prior<-a$aov.tab[1,6]
-        }
-      else {persistence_F_prior<-NA; persistence_pvalue_prior<-NA}
+ 
+      persistence_pvalue<-comm_composition_test(OTU_table = rumen_otus,all_otu_names = rumen_otu_names,data_per_OTU = data_per_OTU,time = 0)
+      persistence_pvalue_prior<-comm_composition_test(OTU_table = rumen_otus,all_otu_names =rumen_otu_names,data_per_OTU = data_per_OTU,time = -1)
     
       #iteratively update data frames
-      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_F,persistence_pvalue,persistence_F_prior,persistence_pvalue_prior))
+      summary_rumen_OTUs<-rbind(summary_rumen_OTUs,data.frame(OTU,mean_arrival,mean_persistence,sd_persistence,num_hosts,taxonomy,persistence_pvalue,persistence_pvalue_prior))
       rumen_list[[i]]<-data_per_OTU
       i=i+1
     }
