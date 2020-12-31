@@ -623,6 +623,7 @@ sd_persist_med<-summary(summary_rumen_OTUs$sd_persistence)["Median"]
 tmp<-summary_rumen_OTUs[summary_rumen_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
 rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])
+rumen_sensitive_OTUs_current<-rumen_sensitive_OTUs_current[,1]
 
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
@@ -635,31 +636,14 @@ rumen_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in rumen_sensitive_OTUs_current){
   data_per_OTU<-rumen_list[[match(focal_OTU,rumen_list_index$X2)]]
-  current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
-  colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
-  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
-  
-  for (row in seq(1,nrow(data_per_OTU))){
-    subject<-as.character(data_per_OTU[row,"subjectID"])
-    arrival_time<-data_per_OTU[row,"arrival_time"]
-    persistence<-data_per_OTU[row,"persistence"]
-    current_community<-data.frame(rumen_otus[rumen_otus$subject==subject & rumen_otus$t==arrival_time,5:2547])
-    current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-    current_comm_analysis[row,4:2547]<-current_community
-    }
-
-  focal<-match(focal_OTU,colnames(current_comm_analysis))
-  current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+  current_comm_analysis<-comm_composition_df(OTU_table = rumen_otus,all_otu_names = rumen_otu_names,data_per_OTU = data_per_OTU,time=0)
   
   #convert to phyloseq object
   #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
   phyloseq_otu_table<-t(current_comm_analysis[,4:2546])
   colnames(phyloseq_otu_table)<-current_comm_analysis$subject
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
-  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
-  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) {as.numeric(as.character(x))+1})
+  phyloseq_otu_table = otu_table(as.matrix(phyloseq_otu_table), taxa_are_rows = TRUE)
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
   phyloseq_taxonomy<-data.frame(rumen_taxonomy)
@@ -713,112 +697,68 @@ rumen_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in rumen_sensitive_OTUs_prior){
     data_per_OTU<-rumen_list[[match(focal_OTU,rumen_list_index$X2)]]
-    prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=2547))
-    colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(rumen_otus[4:2547]))
-    data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
+    prior_comm_analysis<-comm_composition_df(OTU_table = rumen_otus,all_otu_names = rumen_otu_names,data_per_OTU = data_per_OTU,time=-1)
+ 
   
-    for (row in seq(1,nrow(data_per_OTU))){
-        subject<-as.character(data_per_OTU[row,"subjectID"])
-        arrival_time<-data_per_OTU[row,"arrival_time"]
-        persistence<-data_per_OTU[row,"persistence"]
-        
-        #in each host, find the last timepoint taken before arrival & extract community
-        comm_subset<-rumen_otus[rumen_otus$subject==subject,]
-        comm_subset<-comm_subset[order(comm_subset$t),]
-        if (match(arrival_time,comm_subset$t)>1){
-            prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
-            prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:2547])
-            prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-            prior_comm_analysis[row,4:2547]<-prior_community
-        }
-      }
-      
-    #remove focal OTU from community
-    prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-    focal<-match(focal_OTU,colnames(prior_comm_analysis))
-    prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
-    prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
-    prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
+    #convert to phyloseq object
+    #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
+    phyloseq_otu_table<-t(prior_comm_analysis[,4:2546])
+    colnames(phyloseq_otu_table)<-prior_comm_analysis$subject
+    phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) {as.numeric(as.character(x))+1})
+    phyloseq_otu_table = otu_table(as.matrix(phyloseq_otu_table), taxa_are_rows = TRUE)
   
-  #convert to phyloseq object
-  #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
-  phyloseq_otu_table<-t(prior_comm_analysis[,4:2546])
-  colnames(phyloseq_otu_table)<-prior_comm_analysis$subject
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
-  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
-  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
-  
-  #2: taxonomy (remove OTUs that are not present in the OTU table)
-  phyloseq_taxonomy<-data.frame(rumen_taxonomy)
-  rownames(phyloseq_taxonomy)<-phyloseq_taxonomy$X1                               
-  phyloseq_taxonomy<-phyloseq_taxonomy[intersect(phyloseq_taxonomy$X1,colnames(prior_comm_analysis[,4:2546])),]
-  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$X1),]
-  colnames(phyloseq_taxonomy)[2:8]=c("Domain","Phylum","Class","Order","Family","Genus","Species")
-  phyloseq_taxonomy$Domain<-substr(phyloseq_taxonomy$Domain,4,nchar(phyloseq_taxonomy$Domain))
-  phyloseq_taxonomy$Phylum<-substr(phyloseq_taxonomy$Phylum,4,nchar(phyloseq_taxonomy$Phylum))
-  phyloseq_taxonomy$Class<-substr(phyloseq_taxonomy$Class,4,nchar(phyloseq_taxonomy$Class))
-  phyloseq_taxonomy$Order<-substr(phyloseq_taxonomy$Order,4,nchar(phyloseq_taxonomy$Order))
-  phyloseq_taxonomy$Family<-substr(phyloseq_taxonomy$Family,4,nchar(phyloseq_taxonomy$Family))
+    #2: taxonomy (remove OTUs that are not present in the OTU table)
+    phyloseq_taxonomy<-data.frame(rumen_taxonomy)
+    rownames(phyloseq_taxonomy)<-phyloseq_taxonomy$X1                               
+    phyloseq_taxonomy<-phyloseq_taxonomy[intersect(phyloseq_taxonomy$X1,colnames(prior_comm_analysis[,4:2546])),]
+    phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$X1),]
+    colnames(phyloseq_taxonomy)[2:8]=c("Domain","Phylum","Class","Order","Family","Genus","Species")
+    phyloseq_taxonomy$Domain<-substr(phyloseq_taxonomy$Domain,4,nchar(phyloseq_taxonomy$Domain))
+    phyloseq_taxonomy$Phylum<-substr(phyloseq_taxonomy$Phylum,4,nchar(phyloseq_taxonomy$Phylum))
+    phyloseq_taxonomy$Class<-substr(phyloseq_taxonomy$Class,4,nchar(phyloseq_taxonomy$Class))
+    phyloseq_taxonomy$Order<-substr(phyloseq_taxonomy$Order,4,nchar(phyloseq_taxonomy$Order))
+    phyloseq_taxonomy$Family<-substr(phyloseq_taxonomy$Family,4,nchar(phyloseq_taxonomy$Family))
+
   phyloseq_taxonomy$Genus<-substr(phyloseq_taxonomy$Genus,4,nchar(phyloseq_taxonomy$Genus))
-  phyloseq_taxonomy$Species<-substr(phyloseq_taxonomy$Species,4,nchar(phyloseq_taxonomy$Species))
-  rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
-  phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
+    phyloseq_taxonomy$Species<-substr(phyloseq_taxonomy$Species,4,nchar(phyloseq_taxonomy$Species))
+    rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
+    phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
 
-  #3: sample info (add rownames)
-  phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
-  phyloseq_samples$subject<-paste("X",phyloseq_samples$subject,sep="")
-  rownames(phyloseq_samples)<-phyloseq_samples[,1]
-  phyloseq_samples<-phyloseq_samples[,-c(1)]
-  phyloseq_samples<-sample_data(phyloseq_samples)
+    #3: sample info (add rownames)
+    phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
+    phyloseq_samples$subject<-paste("X",phyloseq_samples$subject,sep="")
+    rownames(phyloseq_samples)<-phyloseq_samples[,1]
+    phyloseq_samples<-phyloseq_samples[,-c(1)]
+    phyloseq_samples<-sample_data(phyloseq_samples)
 
-  #create a phyloseq object
-  phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
-  deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
-  deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
-  #extract significantly enriched/depleted taxa
-  res = results(deseq_output, cooksCutoff = FALSE)
-  sigtab = res[which(res$padj < 0.05), ]
-  sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(phyloseq_obj)[rownames(sigtab), ], "matrix"))
-  sigtab<-sigtab[order(-sigtab$log2FoldChange),]
-  sigtab$x<-seq(1,nrow(sigtab))
+    #create a phyloseq object
+    phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
+    deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
+    deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
+    #extract significantly enriched/depleted taxa
+    res = results(deseq_output, cooksCutoff = FALSE)
+    sigtab = res[which(res$padj < 0.05), ]
+    sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(phyloseq_obj)[rownames(sigtab), ], "matrix"))
+    sigtab<-sigtab[order(-sigtab$log2FoldChange),]
+    sigtab$x<-seq(1,nrow(sigtab))
   
-  #add focal OTU info and bind to master dataframe
-  taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==focal_OTU,3:8]
-  sigtab[,"focal_OTU"]<-focal_OTU
-  sigtab[,"focal_Phylum"]<-substr(taxonomy[1],4,nchar(taxonomy[1]))
-  sigtab[,"focal_Class"]<-substr(taxonomy[2],4,nchar(taxonomy[2]))
-  sigtab[,"focal_Order"]<-substr(taxonomy[3],4,nchar(taxonomy[3]))
-  sigtab[,"focal_Family"]<-substr(taxonomy[4],4,nchar(taxonomy[4]))
-  sigtab[,"focal_Genus"]<-substr(taxonomy[5],4,nchar(taxonomy[5]))
-  sigtab[,"focal_Species"]<-substr(taxonomy[6],4,nchar(taxonomy[6]))
-  rumen_prior_deseq<-rbind(rumen_prior_deseq,sigtab)
+    #add focal OTU info and bind to master dataframe
+    taxonomy<-rumen_taxonomy[rumen_taxonomy$X1==focal_OTU,3:8]
+    sigtab[,"focal_OTU"]<-focal_OTU
+    sigtab[,"focal_Phylum"]<-substr(taxonomy[1],4,nchar(taxonomy[1]))
+    sigtab[,"focal_Class"]<-substr(taxonomy[2],4,nchar(taxonomy[2]))
+    sigtab[,"focal_Order"]<-substr(taxonomy[3],4,nchar(taxonomy[3]))
+    sigtab[,"focal_Family"]<-substr(taxonomy[4],4,nchar(taxonomy[4]))
+    sigtab[,"focal_Genus"]<-substr(taxonomy[5],4,nchar(taxonomy[5]))
+    sigtab[,"focal_Species"]<-substr(taxonomy[6],4,nchar(taxonomy[6]))
+    rumen_prior_deseq<-rbind(rumen_prior_deseq,sigtab)
 }
                                  
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the cow rumen microbiome
 #How many DESeq-identified pairs come from the same family? (t=-1)
-rumen_perm_current<-c()
-all_pairs<-combn(as.character(summary_rumen_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
-for (i in seq(1,1000)){
-  print(i)
-  null_relatedness_data<-data.frame(matrix(nrow=nrow(rumen_current_deseq),ncol=5))
-  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
-  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(rumen_current_deseq))] #randomly sample the same number of pairs as in the observe data
-
-  for (j in seq(1,nrow(rumen_current_deseq))){
-    OTU_A<-sampled_pairs[1,j]
-    family_A<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_A,6])
-    OTU_B<-sampled_pairs[2,j]
-    family_B<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_B,6])
-
-    if (!is.na(family_A) & !is.na(family_B) & substr(family_A,4,5)!="" & substr(family_B,4,5)!=""){
-    relatedness<-as.numeric(family_A==family_B)
-    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
-    }
-  }
-  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  rumen_perm_current<-c(rumen_perm_current,mean(null_relatedness_data$relatedness,na.rm=T))
-}
+colnames(summary_rumen_OTUs)[6:11]=c("Phylum","Class","Order","Family","Genus","Species")
+all_pairs_families<-combn(as.character(summary_rumen_OTUs$Family),2)
+rumen_perm_current<-permute_pairs(all_pairs_families,nrow(rumen_current_deseq),1000)
 
 obs_means_neg<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange<0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange<0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
 print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
@@ -831,29 +771,8 @@ print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
 
                                  
 #How many DESeq-identified pairs come from the same family? (t=-1)
-rumen_perm_prior<-c()
-all_pairs<-combn(as.character(summary_rumen_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
-for (i in seq(1,1000)){
-  print(i)
-  null_relatedness_data<-data.frame(matrix(nrow=nrow(rumen_prior_deseq),ncol=5))
-  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
-  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(rumen_prior_deseq))] #randomly sample the same number of pairs as in the observe data
-
-  for (j in seq(1,nrow(rumen_prior_deseq))){
-    OTU_A<-sampled_pairs[1,j]
-    family_A<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_A,6])
-    OTU_B<-sampled_pairs[2,j]
-    family_B<-as.character(rumen_taxonomy[rumen_taxonomy$X1==OTU_B,6])
-
-    if (!is.na(family_A) & !is.na(family_B) & substr(family_A,4,5)!="" & substr(family_B,4,5)!=""){
-    relatedness<-as.numeric(family_A==family_B)
-    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
-    }
-  }
-  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  rumen_perm_prior<-c(rumen_perm_prior,mean(null_relatedness_data$relatedness,na.rm=T))
-}
-                                 
+rumen_perm_prior<-permute_pairs(all_pairs_families,nrow(rumen_prior_deseq),1000)
+                              
 obs_means_neg<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange<0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange<0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
 print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_neg])/1000)
 print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_neg])/1000)
