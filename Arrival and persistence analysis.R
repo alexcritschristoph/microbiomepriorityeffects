@@ -77,7 +77,7 @@ calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
   }
 }
 
-##This function returns the time of the sample immediately before a given "arrival time"
+##Given an OTU table, subject, and sampling time t, this function returns return t-1 (or NA if t was the first sample taken)
 find_prev_timepoint<-function(OTU_table,subject,arrival_time){
   comm_subset<-OTU_table[OTU_table$subject==subject,]
   comm_subset<-comm_subset[order(comm_subset$t),]
@@ -87,7 +87,7 @@ find_prev_timepoint<-function(OTU_table,subject,arrival_time){
   else {return(NA)}
 }
 
-comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
+comm_composition_df<-function(OTU_table,all_otu_names,data_per_OTU,time){
   #set up data frame with the community at (t=0) or before (t=-1) arrival in each subject
   comm_composition<-data.frame(matrix(nrow=0,ncol=(length(all_otu_names)+3)))
   colnames(comm_composition)=c("subject","arrival_time","persistence",all_otu_names)
@@ -100,18 +100,22 @@ comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
     else if (time==-1){search_time<-find_prev_timepoint(OTU_table,subject,arrival_time)}
     
     if (!is.na(search_time)){
-    comm_composition[row,1:3]<-c(subject,arrival_time,persistence)
-    community<-as.numeric(OTU_table[OTU_table$subject==subject & OTU_table$t==search_time,all_otu_names])
-    comm_composition[row,4:(ncol(comm_composition))]<-community
+      comm_composition[row,1:3]<-c(subject,arrival_time,persistence)
+      community<-as.numeric(OTU_table[OTU_table$subject==subject & OTU_table$t==search_time,all_otu_names])
+      comm_composition[row,4:(ncol(comm_composition))]<-community
     }
   }
+  
+  #remove focal OTU from community
+  comm_composition<-comm_composition[!is.na(comm_composition$arrival_time),]
+  comm_composition$persistence<-as.numeric(comm_composition$persistence)
+  focal<-match(data_per_OTU[1,1],colnames(comm_composition))
+  comm_composition<-comm_composition[,-c(focal)]
+  return(comm_composition)
+}
 
-    #remove focal OTU from community
-    comm_composition<-comm_composition[!is.na(comm_composition$arrival_time),]
-    comm_composition$persistence<-as.numeric(comm_composition$persistence)
-    focal<-match(data_per_OTU[1,1],colnames(comm_composition))
-    comm_composition<-comm_composition[,-c(focal)]
-
+comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
+    comm_composition<-comm_composition_df(OTU_table,all_otu_names,data_per_OTU,time)
 
     #PERMANOVA test
     if (var(comm_composition$persistence)>0 & nrow(comm_composition)>2){
@@ -124,6 +128,38 @@ comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
     else {return(NA)}
 }
 
+
+#Given a list of dataframes describing the arrival and persistence of each OTU across subjects, this function returns a dataframe with the list index of each OTU
+list_index<-function(x){
+  x_list_index<-(data.frame(matrix(nrow=0,ncol=2)))
+  for (listitem in seq(1,length(x))){
+    OTU<-as.character(x[[listitem]][1,1])
+    x_list_index[listitem,]=c(listitem,OTU)
+  }
+  return(x_list_index)
+}
+
+
+#Each iteration (n), this function randomly resamples the same number of OTU pairs that were detected in the observed data
+#then calculates the average relatedness (number of pairs from same family) of the randomly resampled set
+permute_pairs<-function(all_pairs_families,sample_size,n){
+  perm_values<-c()
+  for (i in seq(1,n)){
+    null_relatedness_data<-c()
+    sampled_pairs<-all_pairs_families[,sample(seq(1,ncol(all_pairs_families)),sample_size)] #randomly sample the same number of pairs as in the observe data
+    
+    for (j in seq(1,sample_size)){
+      family_A<-sampled_pairs[1,j]
+      family_B<-sampled_pairs[2,j]
+      if (family_A!="unclassified" & family_B!="unclassified" & substr(family_A,nchar(family_A)-11,nchar(family_A))!="unclassified" & substr(family_B,nchar(family_B)-11,nchar(family_B))!="unclassified"){
+        relatedness<-as.numeric(sampled_pairs[1,j]==sampled_pairs[2,j])
+        null_relatedness_data<-c(null_relatedness_data,relatedness)
+      }
+    }
+    perm_values<-c(perm_values,mean(null_relatedness_data,na.rm=T))
+  }
+  return(perm_values)
+}
 
 
 -----------------------------------------------------------------------------------------------------------------------------------------
@@ -182,7 +218,6 @@ for (OTU in humangut_OTU_list){
   }
 
 
-
 ##DESeq analysis of "partner" OTUs whose abundance at (t=0) or before (t=-1) arrival predicts persistence of "focal" OTU
 
 #to be detectably sensitive to microbiome composition, OTUs need to vary a lot in persistence
@@ -197,45 +232,20 @@ humangut_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 humangut_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
-
-humangut_list_index<-data.frame(matrix(nrow=0,ncol=2))
-for (listitem in seq(1,length(humangut_list))){
-  OTU<-as.character(humangut_list[[listitem]][1,1])
-  humangut_list_index[listitem,]=c(listitem,OTU)
-}
+humangut_list_index<-list_index(humangut_list)
 
 ##identify partner OTUs within the community at arrival (t=0)
 humangut_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
-
-#set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in humangut_sensitive_OTUs_current){
   data_per_OTU<-humangut_list[[match(focal_OTU,humangut_list_index$X2)]]
-  current_comm_analysis<-data.frame(matrix(nrow=0,ncol=2419))
-  colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
-  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
-  
-  for (row in seq(1,nrow(data_per_OTU))){
-    subject<-as.character(data_per_OTU[row,"subjectID"])
-    arrival_time<-data_per_OTU[row,"arrival_time"]
-    persistence<-data_per_OTU[row,"persistence"]
-  
-    current_community<-data.frame(otus[otus$subject==subject & otus$t==arrival_time,5:2420])
-    current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-    current_comm_analysis[row,4:2419]<-current_community
-    }
-
-  focal<-match(focal_OTU,colnames(current_comm_analysis))
-  current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+  current_comm_analysis<-comm_composition_df(OTU_table = humangut_otus,all_otu_names = humangut_otu_names,data_per_OTU = data_per_OTU,time=0)
 
   #convert to phyloseq object
   #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
   phyloseq_otu_table<-t(current_comm_analysis[,4:2418])
   colnames(phyloseq_otu_table)<-current_comm_analysis$subject
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
-  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
-  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) {as.numeric(as.character(x))+1})
+  phyloseq_otu_table = otu_table(as.matrix(phyloseq_otu_table), taxa_are_rows = TRUE)
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
   phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
@@ -263,116 +273,59 @@ for (focal_OTU in humangut_sensitive_OTUs_current){
   
   #add focal OTU info and bind to master dataframe
   focal_taxonomy<-data.frame(humangut_taxonomy[humangut_taxonomy$otu==focal_OTU,])
-  sigtab[,"focal_OTU"]<-focal_taxonomy[,"otu"]
-  sigtab[,"focal_Phylum"]<-focal_taxonomy[,"Phylum"]
-  sigtab[,"focal_Class"]<-focal_taxonomy[,"Class"]
-  sigtab[,"focal_Order"]<-focal_taxonomy[,"Order"]
-  sigtab[,"focal_Family"]<-focal_taxonomy[,"Family"]
-  sigtab[,"focal_Genus"]<-focal_taxonomy[,"Genus"]
-  sigtab[,"focal_Species"]<-focal_taxonomy[,"Species"]
+  sigtab[,c("focal_OTU","focal_Phylum","focal_Class","focal_Order","focal_Family","focal_Genus","focal_Species")]<-focal_taxonomy[,c("otu","Phylum","Class","Order","Family","Genus","Species")]
   humangut_current_deseq<-rbind(humangut_current_deseq,sigtab)
 }
 
 
 ##identify partner OTUs within the community before arrival (t=-1)                               
 humangut_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
-                                 
-#set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in humangut_sensitive_OTUs_prior){
     data_per_OTU<-humangut_list[[match(focal_OTU,humangut_list_index$X2)]]
-    prior_comm_analysis<-data.frame(matrix(nrow=12,ncol=2419))
-    colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(otus[5:2420]))
-    data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
-    
-    for (row in seq(1,nrow(data_per_OTU))){
-      subject<-as.character(data_per_OTU[row,"subjectID"])
-      arrival_time<-data_per_OTU[row,"arrival_time"]
-      persistence<-data_per_OTU[row,"persistence"]
-      comm_subset<-otus[otus$subject==subject,]
-      comm_subset<-comm_subset[order(comm_subset$t),]
-      if (match(arrival_time,comm_subset$t)>1){
-        prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
-        prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:2420])
-        prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-        prior_comm_analysis[row,4:2419]<-prior_community
-       }
-    }
+    prior_comm_analysis<-comm_composition_df(OTU_table = humangut_otus,all_otu_names = humangut_otu_names,data_per_OTU = data_per_OTU,time=-1)
   
-    prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-    focal<-match(focal_OTU,colnames(prior_comm_analysis))
-    prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
-    prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
+    #convert to phyloseq object
+    #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
+    phyloseq_otu_table<-t(prior_comm_analysis[,4:2418])
+    colnames(phyloseq_otu_table)<-prior_comm_analysis$subject
+    phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) {as.numeric(as.character(x))+1})
+    phyloseq_otu_table = otu_table(as.matrix(phyloseq_otu_table), taxa_are_rows = TRUE)
   
-  #convert to phyloseq object
-  #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
-  phyloseq_otu_table<-t(prior_comm_analysis[,4:2418])
-  colnames(phyloseq_otu_table)<-prior_comm_analysis$subject
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
-  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
-  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
-  
-  #2: taxonomy (remove OTUs that are not present in the OTU table)
-  phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
-  phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$otu%in%setdiff(phyloseq_taxonomy$otu,colnames(prior_comm_analysis[,4:2418])),]
-  phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$otu),]
-  rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
-  phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
+    #2: taxonomy (remove OTUs that are not present in the OTU table)
+    phyloseq_taxonomy<-data.frame(humangut_taxonomy[,-c(1)])
+    phyloseq_taxonomy<-phyloseq_taxonomy[!phyloseq_taxonomy$otu%in%setdiff(phyloseq_taxonomy$otu,colnames(prior_comm_analysis[,4:2418])),]
+    phyloseq_taxonomy<-phyloseq_taxonomy[order(phyloseq_taxonomy$otu),]
+    rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
+    phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
 
-  #3: sample info (add a discrete time variable, add rownames)
-  phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
-  rownames(phyloseq_samples)<-phyloseq_samples[,1]
-  phyloseq_samples<-phyloseq_samples[,-c(1)]
-  phyloseq_samples<-sample_data(phyloseq_samples)
+    #3: sample info (add a discrete time variable, add rownames)
+    phyloseq_samples<-data.frame(prior_comm_analysis[,c(1:3)])
+    rownames(phyloseq_samples)<-phyloseq_samples[,1]
+    phyloseq_samples<-phyloseq_samples[,-c(1)]
+    phyloseq_samples<-sample_data(phyloseq_samples)
 
-  #create a phyloseq object
-  phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
-  deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
-  deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
-  #extract significantly enriched/depleted taxa
-  res = results(deseq_output, cooksCutoff = FALSE)
-  sigtab = res[which(res$padj < 0.05), ]
-  sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(phyloseq_obj)[rownames(sigtab), ], "matrix"))
-  sigtab<-sigtab[order(-sigtab$log2FoldChange),]
-  sigtab$x<-seq(1,nrow(sigtab))
+    #create a phyloseq object
+    phyloseq_obj<-phyloseq(phyloseq_otu_table,phyloseq_taxonomy,phyloseq_samples)
+    deseq_test = phyloseq_to_deseq2(phyloseq_obj, ~persistence)
+    deseq_output<-DESeq(deseq_test, test="Wald", fitType="parametric")
+    #extract significantly enriched/depleted taxa
+    res = results(deseq_output, cooksCutoff = FALSE)
+    sigtab = res[which(res$padj < 0.05), ]
+    sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(phyloseq_obj)[rownames(sigtab), ], "matrix"))
+    sigtab<-sigtab[order(-sigtab$log2FoldChange),]
+    sigtab$x<-seq(1,nrow(sigtab))
   
-  #add focal OTU info and bind to master data frame
-  focal_taxonomy<-data.frame(humangut_taxonomy[humangut_taxonomy$otu==focal_OTU,])
-  sigtab[,"focal_OTU"]<-focal_taxonomy[,"otu"]
-  sigtab[,"focal_Phylum"]<-focal_taxonomy[,"Phylum"]
-  sigtab[,"focal_Class"]<-focal_taxonomy[,"Class"]
-  sigtab[,"focal_Order"]<-focal_taxonomy[,"Order"]
-  sigtab[,"focal_Family"]<-focal_taxonomy[,"Family"]
-  sigtab[,"focal_Genus"]<-focal_taxonomy[,"Genus"]
-  sigtab[,"focal_Species"]<-focal_taxonomy[,"Species"]
-  humangut_prior_deseq<-rbind(humangut_prior_deseq,sigtab)
+    #add focal OTU info and bind to master data frame
+    focal_taxonomy<-data.frame(humangut_taxonomy[humangut_taxonomy$otu==focal_OTU,])
+    sigtab[,c("focal_OTU","focal_Phylum","focal_Class","focal_Order","focal_Family","focal_Genus","focal_Species")]<-focal_taxonomy[,c("otu","Phylum","Class","Order","Family","Genus","Species")]
+    humangut_prior_deseq<-rbind(humangut_prior_deseq,sigtab)
 }
 
 
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the human gut microbiome
 #How many DESeq-identified pairs come from the same family? (t=-1)
-humangut_perm_current<-c()
-all_pairs<-combn(as.character(summary_humangut_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
-for (i in seq(1,1000)){
-  print(i)
-  null_relatedness_data<-data.frame(matrix(nrow=nrow(humangut_current_deseq),ncol=5))
-  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
-  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(humangut_current_deseq))] #randomly sample the same number of pairs as in the observe data
-
-  for (j in seq(1,nrow(humangut_current_deseq))){
-    OTU_A<-sampled_pairs[1,j]
-    family_A<-as.character(humangut_taxonomy[humangut_taxonomy$otu==OTU_A,7])
-    OTU_B<-sampled_pairs[2,j]
-    family_B<-as.character(humangut_taxonomy[humangut_taxonomy$otu==OTU_B,7])
-
-    if (family_A!="unclassified" & family_B!="unclassified"){
-    relatedness<-as.numeric(family_A==family_B)
-    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
-    }
-  }
-  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  humangut_perm_current<-c(humangut_perm_current,mean(null_relatedness_data$relatedness,na.rm=T))
-}
+all_pairs_families<-combn(as.character(summary_humangut_OTUs$Family),2)
+humangut_perm_current<-permute_pairs(all_pairs_families,nrow(humangut_current_deseq),1000)
 
 obs_means_neg<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified" & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified",])
 print(length(humangut_perm_current[humangut_perm_current<=obs_means_neg])/1000)
@@ -384,31 +337,8 @@ print(length(humangut_perm_current[humangut_perm_current<=obs_means_pos])/1000)
 print(length(humangut_perm_current[humangut_perm_current>=obs_means_pos])/1000)
 
 #positive pairs from arrival (t=0) are slightly MORE closely related than expected by chance (p=0.032)                               
-                                 
-#How many DESeq-identified pairs come from the same family? (t=-1)
-humangut_perm_prior<-c()
-all_pairs<-combn(as.character(summary_humangut_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
-for (i in seq(1,1000)){
-  print(i)
-  null_relatedness_data<-data.frame(matrix(nrow=nrow(humangut_prior_deseq),ncol=5))
-  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
-  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(humangut_prior_deseq))] #randomly sample the same number of pairs as in the observe data
-
-  for (j in seq(1,nrow(humangut_prior_deseq))){
-    OTU_A<-sampled_pairs[1,j]
-    family_A<-as.character(humangut_taxonomy[humangut_taxonomy$otu==OTU_A,7])
-    OTU_B<-sampled_pairs[2,j]
-    family_B<-as.character(humangut_taxonomy[humangut_taxonomy$otu==OTU_B,7])
-
-    if (family_A!="unclassified" & family_B!="unclassified"){
-    relatedness<-as.numeric(family_A==family_B)
-    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
-    }
-  }
-  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  humangut_perm_prior<-c(humangut_perm_prior,mean(null_relatedness_data$relatedness,na.rm=T))
-}
-                                 
+humangut_perm_prior<-permute_pairs(all_pairs_families,nrow(humangut_prior_deseq),1000)                                
+                  
 obs_means_neg<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified" & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified",])
 print(length(humangut_perm_prior[humangut_perm_prior<=obs_means_neg])/1000)
 print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_neg])/1000)
@@ -418,9 +348,8 @@ print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_neg])/1000)
 obs_means_pos<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified" & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified",])
 print(length(humangut_perm_prior[humangut_perm_prior<=obs_means_pos])/1000)
 print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_pos])/1000)
-                             
-                                                                
-                                 
+                                                                             
+                               
 -----------------------------------------------------------------------------------------------------------------------------------------                               
                   
                                  
@@ -497,13 +426,7 @@ murine_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OT
 murine_sensitive_OTUs_current<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue),"OTU"]
 murine_sensitive_OTUs_prior<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue_prior<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue_prior),"OTU"]
                                  
-
-murine_list_index<-data.frame(matrix(nrow=0,ncol=2))
-for (listitem in seq(1,length(murine_list))){
-  OTU<-as.character(murine_list[[listitem]][1,1])
-  murine_list_index[listitem,]=c(listitem,OTU)
-}
-
+murine_list_index<-list_index(murine_list)
                                    
 ##identify partner OTUs within the community at arrival (t=0)
 murine_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
@@ -511,31 +434,14 @@ murine_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in murine_sensitive_OTUs_current){
   data_per_OTU<-murine_list[[match(focal_OTU,murine_list_index$X2)]]
-  current_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
-  colnames(current_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
-  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
-  
-  for (row in seq(1,nrow(data_per_OTU))){
-    subject<-as.character(data_per_OTU[row,"subjectID"])
-    arrival_time<-data_per_OTU[row,"arrival_time"]
-    persistence<-data_per_OTU[row,"persistence"]
-    current_community<-data.frame(murine_otus[murine_otus$subject==subject & murine_otus$t==arrival_time,5:3099])
-    current_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-    current_comm_analysis[row,4:3098]<-current_community
-    }
-
-  focal<-match(focal_OTU,colnames(current_comm_analysis))
-  current_comm_analysis<-current_comm_analysis[,-c(focal)]
-  current_comm_analysis$persistence<-as.numeric(current_comm_analysis$persistence)
+  current_comm_analysis<-comm_composition_df(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time=0)
   
   #convert to phyloseq object
   #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
   phyloseq_otu_table<-t(current_comm_analysis[,4:3097])
   colnames(phyloseq_otu_table)<-current_comm_analysis$subject
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
-  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
-  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x))+1)
+  phyloseq_otu_table = otu_table(as.matrix(phyloseq_otu_table), taxa_are_rows = TRUE)
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
   phyloseq_taxonomy<-data.frame(murine_taxonomy[,seq(1,13,2)])
@@ -563,13 +469,8 @@ for (focal_OTU in murine_sensitive_OTUs_current){
       sigtab$x<-seq(1,nrow(sigtab))
   
       #add focal OTU info and bind to master dataframe
-      taxonomy<-as.character(murine_taxonomy[murine_taxonomy$OTU==focal_OTU,])
-      sigtab[,"focal_OTU"]<-focal_OTU
-      sigtab[,"focal_Phylum"]<-taxonomy[5]
-      sigtab[,"focal_Class"]<-taxonomy[7]
-      sigtab[,"focal_Order"]<-taxonomy[9]
-      sigtab[,"focal_Family"]<-taxonomy[11]
-      sigtab[,"focal_Genus"]<-taxonomy[13]
+      focal_taxonomy<-data.frame(murine_taxonomy[murine_taxonomy$OTU==focal_OTU,])
+      sigtab[,c("focal_OTU","focal_Phylum","focal_Class","focal_Order","focal_Family","focal_Genus")]<-focal_taxonomy[,c("OTU","Phylum","Class","Order","Family","Genus")]
       murine_current_deseq<-rbind(murine_current_deseq,sigtab)
     }
 }                                        
@@ -581,41 +482,15 @@ murine_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
 #set up dataframe of community at arrival again (for the small number of sensitive OTUs)
 for (focal_OTU in murine_sensitive_OTUs_prior){
   data_per_OTU<-murine_list[[match(focal_OTU,murine_list_index$X2)]]
-  prior_comm_analysis<-data.frame(matrix(nrow=0,ncol=3098))
-  colnames(prior_comm_analysis)=c("subject","arrival_time","persistence",colnames(murine_otus[5:3099]))
-  data_per_OTU<-data_per_OTU[!is.na(data_per_OTU$arrival_time) & !is.na(data_per_OTU$persistence),]
+  prior_comm_analysis<-comm_composition_df(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time=-1)
   
-  for (row in seq(1,nrow(data_per_OTU))){
-    subject<-as.character(data_per_OTU[row,"subjectID"])
-    arrival_time<-data_per_OTU[row,"arrival_time"]
-    persistence<-data_per_OTU[row,"persistence"]
-    
-    
-    #in each host, find the last timepoint taken before arrival & extract community
-    comm_subset<-murine_otus[murine_otus$subject==subject,]
-    comm_subset<-comm_subset[order(comm_subset$t),]
-    if (match(arrival_time,comm_subset$t)>1){
-        prior_timepoint<-as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])
-        prior_community<-data.frame(comm_subset[comm_subset$t==prior_timepoint,5:3099])
-        prior_comm_analysis[row,1:3]<-c(subject,arrival_time,persistence)
-        prior_comm_analysis[row,4:3098]<-prior_community
-        }
-     }
-    
-     #remove focal OTU from community
-     prior_comm_analysis$persistence<-as.numeric(prior_comm_analysis$persistence)
-     focal<-match(focal_OTU,colnames(prior_comm_analysis))
-     prior_comm_analysis<-prior_comm_analysis[,-c(focal)]
-     prior_comm_analysis<-prior_comm_analysis[!is.na(prior_comm_analysis$arrival_time),]
   
   #convert to phyloseq object
   #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
   phyloseq_otu_table<-t(prior_comm_analysis[,4:3097])
   colnames(phyloseq_otu_table)<-prior_comm_analysis$subject
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x)))
-  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x){x+1})
-  phyloseq_otu_table<-as.matrix(phyloseq_otu_table)
-  phyloseq_otu_table = otu_table(phyloseq_otu_table, taxa_are_rows = TRUE)
+  phyloseq_otu_table<-mutate_all(data.frame(phyloseq_otu_table), function(x) as.numeric(as.character(x))+1)
+  phyloseq_otu_table = otu_table(as.matrix(phyloseq_otu_table), taxa_are_rows = TRUE)
   
   #2: taxonomy (remove OTUs that are not present in the OTU table)
   phyloseq_taxonomy<-data.frame(murine_taxonomy[,seq(1,13,2)])
@@ -643,48 +518,21 @@ for (focal_OTU in murine_sensitive_OTUs_prior){
       sigtab$x<-seq(1,nrow(sigtab))
   
       #add focal OTU info and bind to master dataframe
-      taxonomy<-as.character(murine_taxonomy[murine_taxonomy$OTU==focal_OTU,])
-      sigtab[,"focal_OTU"]<-focal_OTU
-      sigtab[,"focal_Phylum"]<-taxonomy[5]
-      sigtab[,"focal_Class"]<-taxonomy[7]
-      sigtab[,"focal_Order"]<-taxonomy[9]
-      sigtab[,"focal_Family"]<-taxonomy[11]
-      sigtab[,"focal_Genus"]<-taxonomy[13]
+      focal_taxonomy<-data.frame(murine_taxonomy[murine_taxonomy$OTU==focal_OTU,])
+      sigtab[,c("focal_OTU","focal_Phylum","focal_Class","focal_Order","focal_Family","focal_Genus")]<-focal_taxonomy[,c("OTU","Phylum","Class","Order","Family","Genus")]
       murine_prior_deseq<-rbind(murine_prior_deseq,sigtab)
     }
 }                                 
                                  
-                                 
-                                 
+                                                                 
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the mouse gut microbiome
 #How many DESeq-identified pairs come from the same family? (t=0)
-murine_perm_current<-c()
-all_pairs<-combn(as.character(summary_murine_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
-for (i in seq(1,1000)){
-  print(i)
-  null_relatedness_data<-data.frame(matrix(nrow=nrow(murine_current_deseq),ncol=5))
-  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
-  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(murine_current_deseq))] #randomly sample the same number of pairs as in the observed data
-
-  for (j in seq(1,nrow(murine_current_deseq))){
-    OTU_A<-sampled_pairs[1,j]
-    family_A<-as.character(murine_taxonomy[murine_taxonomy$OTU==OTU_A,"Family"])
-    OTU_B<-sampled_pairs[2,j]
-    family_B<-as.character(murine_taxonomy[murine_taxonomy$OTU==OTU_B,"Family"])
-
-    if (substr(family_A,nchar(family_A)-11,nchar(family_A))!="unclassified" & substr(family_B,nchar(family_B)-11,nchar(family_B))!="unclassified"){
-    relatedness<-as.numeric(family_A==family_B)
-    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
-    }
-  }
-  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  murine_perm_current<-c(murine_perm_current,mean(null_relatedness_data$relatedness,na.rm=T))
-}
+all_pairs_families<-combn(as.character(summary_murine_OTUs$Family),2)
+murine_perm_current<-permute_pairs(all_pairs_families,nrow(murine_current_deseq),1000)
 
 obs_means_neg<-nrow(murine_current_deseq[murine_current_deseq$log2FoldChange<0 & substr(murine_current_deseq$focal_Family,nchar(murine_current_deseq$focal_Family)-11,nchar(murine_current_deseq$focal_Family))!="unclassified" & substr(murine_current_deseq$Family,nchar(murine_current_deseq$Family)-11,nchar(murine_current_deseq$Family))!="unclassified"  & murine_current_deseq$focal_Family==murine_current_deseq$Family,])/nrow(murine_current_deseq[murine_current_deseq$log2FoldChange<0 & substr(murine_current_deseq$focal_Family,nchar(murine_current_deseq$focal_Family)-11,nchar(murine_current_deseq$focal_Family))!="unclassified" & substr(murine_current_deseq$Family,nchar(murine_current_deseq$Family)-11,nchar(murine_current_deseq$Family))!="unclassified",])
 print(length(murine_perm_current[murine_perm_current<=obs_means_neg])/1000)
 print(length(murine_perm_current[murine_perm_current>=obs_means_neg])/1000)
-
                                  
 obs_means_pos<-nrow(murine_current_deseq[murine_current_deseq$log2FoldChange>0 & substr(murine_current_deseq$focal_Family,nchar(murine_current_deseq$focal_Family)-11,nchar(murine_current_deseq$focal_Family))!="unclassified" & substr(murine_current_deseq$Family,nchar(murine_current_deseq$Family)-11,nchar(murine_current_deseq$Family))!="unclassified"  & murine_current_deseq$focal_Family==murine_current_deseq$Family,])/nrow(murine_current_deseq[murine_current_deseq$log2FoldChange>0 & substr(murine_current_deseq$focal_Family,nchar(murine_current_deseq$focal_Family)-11,nchar(murine_current_deseq$focal_Family))!="unclassified" & substr(murine_current_deseq$Family,nchar(murine_current_deseq$Family)-11,nchar(murine_current_deseq$Family))!="unclassified",])
 print(length(murine_perm_current[murine_perm_current<=obs_means_pos])/1000)
@@ -692,29 +540,8 @@ print(length(murine_perm_current[murine_perm_current>=obs_means_pos])/1000)
 
                                  
 #How many DESeq-identified pairs come from the same family? (t=-1)
-murine_perm_prior<-c()
-all_pairs<-combn(as.character(summary_murine_OTUs$OTU),2) #all possible pairs of OTUs that passed our initial filtering criteria
-for (i in seq(1,1000)){
-  print(i)
-  null_relatedness_data<-data.frame(matrix(nrow=nrow(murine_prior_deseq),ncol=5))
-  colnames(null_relatedness_data)<-c("OTU_A","Family_A","OTU_B","Family_B","relatedness")
-  sampled_pairs<-all_pairs[,sample(seq(1,ncol(all_pairs)),nrow(murine_prior_deseq))] #randomly sample the same number of pairs as in the observed data
-
-  for (j in seq(1,nrow(murine_prior_deseq))){
-    OTU_A<-sampled_pairs[1,j]
-    family_A<-as.character(murine_taxonomy[murine_taxonomy$OTU==OTU_A,"Family"])
-    OTU_B<-sampled_pairs[2,j]
-    family_B<-as.character(murine_taxonomy[murine_taxonomy$OTU==OTU_B,"Family"])
-
-    if (substr(family_A,nchar(family_A)-11,nchar(family_A))!="unclassified" & substr(family_B,nchar(family_B)-11,nchar(family_B))!="unclassified"){
-    relatedness<-as.numeric(family_A==family_B)
-    null_relatedness_data[j,]<-c(OTU_A,family_A,OTU_B,family_B,relatedness)
-    }
-  }
-  null_relatedness_data$relatedness<-as.numeric(null_relatedness_data$relatedness)
-  murine_perm_prior<-c(murine_perm_prior,mean(null_relatedness_data$relatedness,na.rm=T))
-}
-
+murine_perm_prior<-permute_pairs(all_pairs_families,nrow(murine_prior_deseq),1000)
+                               
 obs_means_neg<-nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange<0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified"  & murine_prior_deseq$focal_Family==murine_prior_deseq$Family,])/nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange<0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified",])
 print(length(murine_perm_prior[murine_perm_prior<=obs_means_neg])/1000)
 print(length(murine_perm_prior[murine_perm_prior>=obs_means_neg])/1000)
@@ -800,11 +627,7 @@ rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
-rumen_list_index<-data.frame(matrix(nrow=0,ncol=2))
-for (listitem in seq(1,length(rumen_list))){
-  OTU<-as.character(rumen_list[[listitem]][1,1])
-  rumen_list_index[listitem,]=c(listitem,OTU)
-}                                 
+rumen_list_index<-list_index(rumen_list)                                
                                  
 ##identify partner OTUs within the community at arrival (t=0)
 rumen_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
