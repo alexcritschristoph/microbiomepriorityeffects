@@ -151,7 +151,7 @@ permute_pairs<-function(all_pairs_families,sample_size,n){
     for (j in seq(1,sample_size)){
       family_A<-sampled_pairs[1,j]
       family_B<-sampled_pairs[2,j]
-      if (family_A!="unclassified" & family_B!="unclassified" & substr(family_A,nchar(family_A)-11,nchar(family_A))!="unclassified" & substr(family_B,nchar(family_B)-11,nchar(family_B))!="unclassified"){
+      if (family_A!="unclassified" & family_B!="unclassified" & substr(family_A,nchar(family_A)-11,nchar(family_A))!="unclassified" & substr(family_B,nchar(family_B)-11,nchar(family_B))!="unclassified" & !is.na(family_A) & !is.na(family_B) & substr(family_A,4,5)!="" & substr(family_B,4,5)!=""){
         relatedness<-as.numeric(sampled_pairs[1,j]==sampled_pairs[2,j])
         null_relatedness_data<-c(null_relatedness_data,relatedness)
       }
