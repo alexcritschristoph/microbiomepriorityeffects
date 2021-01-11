@@ -1,12 +1,7 @@
-##Arrival & persistence analysis for priority effects review
+##Analysis of temporal data from mammalian gut microbiomes
 ##Reena Debray
 
-##import libraries
-library(ggplot2)
-library(readr)
-library(RColorBrewer)
-library(gridExtra)
-library(ape)
+##Load packages used in this script
 library(vegan)
 library(phyloseq)
 library(DESeq2)
@@ -29,7 +24,6 @@ df_subset<-function(OTU_table,OTU_name,subject_name){
   otus_subset<-OTU_table[OTU_table$subject==subject_name,c("t","subject","sampleID",OTU_name)]
   otus_subset$t<-as.numeric(otus_subset$t)
   otus_subset<-otus_subset[order(otus_subset$t),] #order by time point
- 
   return(otus_subset)
 }
 
@@ -46,29 +40,33 @@ calculate_arrival_time<-function(otus_subset,OTU_name){
 ##This function returns persistence (the proportion of a certain window (set by obs_length) after arrival in which OTU X was detected)
 calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
   
-  if (is.na(arrival_time)) {return(NA)}
+  if (is.na(arrival_time)) {return(NA)} #if this OTU was never observed in this host, return NA
   if (otus_subset[nrow(otus_subset),"t"]-arrival_time<obs_length) {return(NA)} #if OTU arrived too close to the end of the study, return NA
   if ((otus_subset[match(arrival_time,otus_subset$t)+1,"t"]-arrival_time)>obs_length) {return(NA)} #if no samples were taken within the observation window, return NA
   
   else {
+    #define the observation interval
     start_time<-arrival_time
     end_time<-arrival_time+obs_length
     end_i<-match(as.numeric(tail(otus_subset[otus_subset$t<=end_time,"t"],1)),otus_subset$t)
     persistence=0
     i=match(start_time,otus_subset$t)+1
     
+    #loop through the observations taken between the start of the interval (start_time, indexed by i), and the end of the interval (end_time, indexed by end_i)
     while (i<end_i){
     
         while (otus_subset[i,OTU_name]>0 & i<end_i){i=i+1} #find next dropout (abundance=0) event
         dropout_time<-otus_subset[i-1,"t"] #last time it was observed
-        persistence=persistence+(dropout_time-start_time)
+        persistence=persistence+(dropout_time-start_time) #add the amount of time that this OTU was detected so far to a running count of persistence
 
         while (otus_subset[i,OTU_name]==0 & i<end_i){i=i+1} #find the next colonization event
+        #re-initialize start_time and i to the beginning of the next colonization event
         start_time<-otus_subset[i,"t"]
         i=match(start_time,otus_subset$t)
+  #repeat until end of observation window
   }
   
-  if (otus_subset[end_i,OTU_name]>0){persistence=persistence+otus_subset[end_i,"t"]-otus_subset[end_i-1,"t"]}
+  if (otus_subset[end_i,OTU_name]>0){persistence=persistence+otus_subset[end_i,"t"]-otus_subset[end_i-1,"t"]} #if abundance was greater than zero in the final observation, add to running count of persistence
     
   obs_window<-otus_subset[end_i,"t"]-(arrival_time) #actual length of time observed (may be slightly different from obs_length depending on when samples were taken)
   prop_persistence<-as.numeric(persistence/obs_window)
@@ -79,26 +77,31 @@ calculate_persistence<-function(otus_subset,OTU_name,arrival_time,obs_length){
 
 ##Given an OTU table, subject, and sampling time t, this function returns return t-1 (or NA if t was the first sample taken)
 find_prev_timepoint<-function(OTU_table,subject,arrival_time){
+  #subset to all samples taken from this subject
   comm_subset<-OTU_table[OTU_table$subject==subject,]
   comm_subset<-comm_subset[order(comm_subset$t),]
-  if (match(arrival_time,comm_subset$t)>1){
-    return(as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"]))
+  if (match(arrival_time,comm_subset$t)>1){ #find the index associated with the arrival time of this OTU
+    return(as.numeric(comm_subset[match(arrival_time,comm_subset$t)-1,"t"])) #return the sampling time of the index immediately prior
   }
   else {return(NA)}
 }
 
+#Given a focal OTU, this function returns a data frame with subject, arrival time, persistence, and the community composition at (time=0) or before (time=-1) the arrival of the focal OTU
 comm_composition_df<-function(OTU_table,all_otu_names,data_per_OTU,time){
   #set up data frame with the community at (t=0) or before (t=-1) arrival in each subject
   comm_composition<-data.frame(matrix(nrow=0,ncol=(length(all_otu_names)+3)))
   colnames(comm_composition)=c("subject","arrival_time","persistence",all_otu_names)
+  #first, fill in data on each subject, and the arrival/persistence of the focal OTU in each subject
   for (row in seq(1,nrow(data_per_OTU))){
     subject<-as.character(data_per_OTU[row,"subjectID"])
     arrival_time<-data_per_OTU[row,"arrival_time"]
     persistence<-data_per_OTU[row,"persistence"]
     
+    #set search_time to either the arrival time of the focal OTU, or the sampling time immediately prior to arrival time
     if (time==0){search_time<-arrival_time}
     else if (time==-1){search_time<-find_prev_timepoint(OTU_table,subject,arrival_time)}
     
+    #extract the counts of the entire community at the search time
     if (!is.na(search_time)){
       comm_composition[row,1:3]<-c(subject,arrival_time,persistence)
       community<-as.numeric(OTU_table[OTU_table$subject==subject & OTU_table$t==search_time,all_otu_names])
@@ -114,6 +117,7 @@ comm_composition_df<-function(OTU_table,all_otu_names,data_per_OTU,time){
   return(comm_composition)
 }
 
+#Given a focal OTU, this function conducts a PERMANOVA of persistence on community composition at (time=0) or before (time=-1) arrival of the focal OTU.
 comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
     comm_composition<-comm_composition_df(OTU_table,all_otu_names,data_per_OTU,time)
 
@@ -129,7 +133,7 @@ comm_composition_test<-function(OTU_table,all_otu_names,data_per_OTU,time){
 }
 
 
-#Given a list of dataframes describing the arrival and persistence of each OTU across subjects, this function returns a dataframe with the list index of each OTU
+#Given a list of dataframes describing the arrival and persistence of each OTU across subjects, this function returns a dataframe with the list index of each OTU.
 list_index<-function(x){
   x_list_index<-(data.frame(matrix(nrow=0,ncol=2)))
   for (listitem in seq(1,length(x))){
@@ -146,8 +150,10 @@ permute_pairs<-function(all_pairs_families,sample_size,n){
   perm_values<-c()
   for (i in seq(1,n)){
     null_relatedness_data<-c()
-    sampled_pairs<-all_pairs_families[,sample(seq(1,ncol(all_pairs_families)),sample_size)] #randomly sample the same number of pairs as in the observe data
+    #randomly sample the same number of pairs as in the observe data
+    sampled_pairs<-all_pairs_families[,sample(seq(1,ncol(all_pairs_families)),sample_size)]
     
+    #calculate the relatedness of the random sample
     for (j in seq(1,sample_size)){
       family_A<-sampled_pairs[1,j]
       family_B<-sampled_pairs[2,j]
@@ -167,13 +173,6 @@ permute_pairs<-function(all_pairs_families,sample_size,n){
 
 ###Human gut microbiome data analysis
 ###data from Guitar et al 2019, Nature Communications
-
-##import OTU tables and OTU taxonomy
-#human data: OTU tables ("humangut_otus"), taxonomic annotations ("humangut_taxonomy"), trait annotations ("predicted_trait_data")
-humangut_otus <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/otus.csv")
-humangut_taxonomy <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/SILVA_taxonomy.csv")
-predicted_trait_data <- read_csv("~/Desktop/Microbiomes as food webs/Human gut data/predicted_trait_data.csv")
-
 
 ##Make a list of OTUs that are detected in at least 12 individuals (670 OTUs)
 humangut_otu_names<-colnames(humangut_otus)[5:2420]
@@ -216,25 +215,18 @@ for (OTU in humangut_OTU_list){
       i=i+1
      }  
   }
-
+humangut_list_index<-list_index(humangut_list)
 
 ##DESeq analysis of "partner" OTUs whose abundance at (t=0) or before (t=-1) arrival predicts persistence of "focal" OTU
-
-#to be detectably sensitive to microbiome composition, OTUs need to vary a lot in persistence
-#here I am considering the set of OTUs with variation in persistence (SD) above the median level-- but this could be adjusted
-
+#Start by identifying OTUs with variation in persistence above the median level
 sd_persist_med<-summary(summary_humangut_OTUs$sd_persistence)["Median"]
-
 tmp<-summary_humangut_OTUs[summary_humangut_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
 humangut_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"])
-
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 humangut_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
-humangut_list_index<-list_index(humangut_list)
-
-##identify partner OTUs within the community at arrival (t=0)
+##Use DESeq to identify partner OTUs within the community at arrival (t=0)
 humangut_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 for (focal_OTU in humangut_sensitive_OTUs_current){
   data_per_OTU<-humangut_list[[match(focal_OTU,humangut_list_index$X2)]]
@@ -323,27 +315,24 @@ for (focal_OTU in humangut_sensitive_OTUs_prior){
 
 
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the human gut microbiome
-#How many DESeq-identified pairs come from the same family? (t=-1)
+#How many DESeq-identified pairs come from the same family, compared to randomly resampled OTU pairs? (t=0)
 all_pairs_families<-combn(as.character(summary_humangut_OTUs$Family),2)
 humangut_perm_current<-permute_pairs(all_pairs_families,nrow(humangut_current_deseq),1000)
 
 obs_means_neg<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified" & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange<0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified",])
 print(length(humangut_perm_current[humangut_perm_current<=obs_means_neg])/1000)
 print(length(humangut_perm_current[humangut_perm_current>=obs_means_neg])/1000)
-
                                  
 obs_means_pos<-nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange>0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified" & humangut_current_deseq$Family==humangut_current_deseq$focal_Family,])/nrow(humangut_current_deseq[humangut_current_deseq$log2FoldChange>0 & humangut_current_deseq$focal_Family!="unclassified" & humangut_current_deseq$Family!="unclassified",])
 print(length(humangut_perm_current[humangut_perm_current<=obs_means_pos])/1000)
 print(length(humangut_perm_current[humangut_perm_current>=obs_means_pos])/1000)
 
-#positive pairs from arrival (t=0) are slightly MORE closely related than expected by chance (p=0.032)                               
+#How many DESeq-identified pairs come from the same family, compared to randomly resampled OTU pairs? (t=-1)                             
 humangut_perm_prior<-permute_pairs(all_pairs_families,nrow(humangut_prior_deseq),1000)                                
                   
 obs_means_neg<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified" & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange<0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified",])
 print(length(humangut_perm_prior[humangut_perm_prior<=obs_means_neg])/1000)
 print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_neg])/1000)
-                                 
-#negative pairs from the time before arrival (t=-1) are MORE closely related than expected by chance (p=0.001)
                                  
 obs_means_pos<-nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified" & humangut_prior_deseq$Family==humangut_prior_deseq$focal_Family,])/nrow(humangut_prior_deseq[humangut_prior_deseq$log2FoldChange>0 & humangut_prior_deseq$focal_Family!="unclassified" & humangut_prior_deseq$Family!="unclassified",])
 print(length(humangut_perm_prior[humangut_perm_prior<=obs_means_pos])/1000)
@@ -355,19 +344,13 @@ print(length(humangut_perm_prior[humangut_perm_prior>=obs_means_pos])/1000)
                                  
 ###Mouse gut microbiome data analysis
 ###Data from Kozich et al 2013, Applied and Environmental Microbiology
-
-##Import OTU tables and OTU taxonomy
-murine_otus<-read_csv("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_OTUs.csv")
-murine_otus<-murine_otus[murine_otus$t<300,] #remove the last time-point because there was a 6-month gap in sampling
-murine_taxonomy <- read_excel("~/Desktop/Microbiomes as food webs/Mouse gut data/murine_taxonomy.xlsx")
- 
                                  
 ##Make a list of OTUs that were detected in at least 3 individuals (971 OTUs)
+murine_otus<-murine_otus[murine_otus$t<300,] #remove the last time-point because there was a 6-month gap in sampling
 murine_otu_names<-colnames(murine_otus)[5:3099]
 murine_subject_names<-unique(murine_otus$subject)
 murine_OTU_list<-make_otu_list(murine_otus,murine_otu_names,murine_subject_names)
-                               
-                                 
+                                                        
 ##identify OTUs that are sensitive to microbiome composition
 summary_murine_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #this dataframe contains summary statistics of mean arrival time, mean persistence, and sensitivity to microbiome composition of each OTU
 murine_list<-list() #each entry of this list contains the arrival time & persistence of the OTU in each host
@@ -394,7 +377,6 @@ for (OTU in murine_OTU_list){
 
   #if there are enough observations, test for dependence on microbiome composition at arrival (t=0) and before arrival (t=-1)
   if (num_hosts>=3 & sd(data_per_OTU$persistence)>0){
-    
       persistence_pvalue<-comm_composition_test(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time = 0)
       persistence_pvalue_prior<-comm_composition_test(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time = -1)
     
@@ -402,32 +384,22 @@ for (OTU in murine_OTU_list){
       murine_list[[i]]<-data_per_OTU
       i=i+1
   }
- 
 }
-
+murine_list_index<-list_index(murine_list)
 
 ##DESeq analysis of "partner" OTUs whose abundance at (t=0) or before (t=-1) arrival predicts persistence of "focal" OTU
-
-#to be detectably sensitive to microbiome composition, OTUs need to vary a lot in persistence
-#here I am considering the set of OTUs with variation in persistence (SD) above the median level-- but this could be adjusted
-
+#Start by identifying OTUs with variation in persistence above the median level
 sd_persist_med<-summary(summary_murine_OTUs$sd_persistence)["Median"]
-
 tmp<-summary_murine_OTUs[summary_murine_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
 murine_sensitive_OTUs_current<-as.character(tmp[tmp$persistence_padj<0.1,"OTU"])
-
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 murine_sensitive_OTUs_prior<-as.character(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
-#None of these pass multiple testing correction (likely due to small sample size + low variation in persistence of many OTUs).
-#Let's use the set that are nominally significant for now-- to see if patterns are the same as the other two datasets
-                                 
+#None of these pass multiple testing correction (likely due to small sample size + low variation in persistence of many OTUs). We'll use the set that are nominally significant to see if the patterns are the same as in the other datasets.                           
 murine_sensitive_OTUs_current<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue),"OTU"]
-murine_sensitive_OTUs_prior<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue_prior<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue_prior),"OTU"]
-                                 
-murine_list_index<-list_index(murine_list)
-                                   
+murine_sensitive_OTUs_prior<-summary_murine_OTUs[summary_murine_OTUs$persistence_pvalue_prior<0.05 & !is.na(summary_murine_OTUs$persistence_pvalue_prior),"OTU"]                                 
+                          
 ##identify partner OTUs within the community at arrival (t=0)
 murine_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 
@@ -484,7 +456,6 @@ for (focal_OTU in murine_sensitive_OTUs_prior){
   data_per_OTU<-murine_list[[match(focal_OTU,murine_list_index$X2)]]
   prior_comm_analysis<-comm_composition_df(OTU_table = murine_otus,all_otu_names = murine_otu_names,data_per_OTU = data_per_OTU,time=-1)
   
-  
   #convert to phyloseq object
   #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
   phyloseq_otu_table<-t(prior_comm_analysis[,4:3097])
@@ -526,7 +497,7 @@ for (focal_OTU in murine_sensitive_OTUs_prior){
                                  
                                                                  
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the mouse gut microbiome
-#How many DESeq-identified pairs come from the same family? (t=0)
+#How many DESeq-identified pairs come from the same family, compared to randomly resampled OTU pairs? (t=0)
 all_pairs_families<-combn(as.character(summary_murine_OTUs$Family),2)
 murine_perm_current<-permute_pairs(all_pairs_families,nrow(murine_current_deseq),1000)
 
@@ -539,14 +510,13 @@ print(length(murine_perm_current[murine_perm_current<=obs_means_pos])/1000)
 print(length(murine_perm_current[murine_perm_current>=obs_means_pos])/1000)
 
                                  
-#How many DESeq-identified pairs come from the same family? (t=-1)
+#How many DESeq-identified pairs come from the same family, compared to randomly resampled OTU pairs? (t=-1)
 murine_perm_prior<-permute_pairs(all_pairs_families,nrow(murine_prior_deseq),1000)
                                
 obs_means_neg<-nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange<0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified"  & murine_prior_deseq$focal_Family==murine_prior_deseq$Family,])/nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange<0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified",])
 print(length(murine_perm_prior[murine_perm_prior<=obs_means_neg])/1000)
 print(length(murine_perm_prior[murine_perm_prior>=obs_means_neg])/1000)
-
-                                 
+                  
 obs_means_pos<-nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange>0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified"  & murine_prior_deseq$focal_Family==murine_prior_deseq$Family,])/nrow(murine_prior_deseq[murine_prior_deseq$log2FoldChange>0 & substr(murine_prior_deseq$focal_Family,nchar(murine_prior_deseq$focal_Family)-11,nchar(murine_prior_deseq$focal_Family))!="unclassified" & substr(murine_prior_deseq$Family,nchar(murine_prior_deseq$Family)-11,nchar(murine_prior_deseq$Family))!="unclassified",])
 print(length(murine_perm_prior[murine_perm_prior<=obs_means_pos])/1000)
 print(length(murine_perm_prior[murine_perm_prior>=obs_means_pos])/1000)
@@ -569,7 +539,6 @@ rumen_OTU_list<-make_otu_list(rumen_otus,rumen_otu_names,rumen_subject_names)
                        
 
 ##Identify OTUs that are sensitive to microbiome composition
-
 summary_rumen_OTUs<-data.frame(matrix(nrow=0,ncol=13)) #this dataframe contains summary statistics of mean arrival time, mean persistence, and sensitivity to microbiome composition of each OTU
 rumen_list<-list() #each entry of this list contains the arrival time & persistence of the OTU in each host
 i=1
@@ -611,25 +580,20 @@ for (OTU in rumen_OTU_list){
       i=i+1
     }
   }
-                                 
+rumen_list_index<-list_index(rumen_list)                                 
+
                                  
 ##DESeq analysis of "partner" OTUs whose abundance at (t=0) or before (t=-1) arrival predicts persistence of "focal" OTU
-
-#to be detectably sensitive to microbiome composition, OTUs need to vary a lot in persistence
-#here I am considering the set of OTUs with variation in persistence (SD) above the median level-- but this could be adjusted
-                                 
+#Start by identifying OTUs with variation in persistence above the median                                
 sd_persist_med<-summary(summary_rumen_OTUs$sd_persistence)["Median"]
-
 tmp<-summary_rumen_OTUs[summary_rumen_OTUs$sd_persistence>=sd_persist_med,]
 tmp$persistence_padj<-p.adjust(tmp$persistence_pvalue,method="BH")
 rumen_sensitive_OTUs_current<-data.frame(tmp[tmp$persistence_padj<0.1,"OTU"])
 rumen_sensitive_OTUs_current<-rumen_sensitive_OTUs_current[,1]
-
 tmp$persistence_padj_prior<-p.adjust(tmp$persistence_pvalue_prior,method="BH")
 rumen_sensitive_OTUs_prior<-data.frame(tmp[tmp$persistence_padj_prior<0.1,"OTU"])
 
-rumen_list_index<-list_index(rumen_list)                                
-                                 
+                            
 ##identify partner OTUs within the community at arrival (t=0)
 rumen_current_deseq<-data.frame(matrix(nrow=0,ncol=22))
 
@@ -698,7 +662,6 @@ rumen_prior_deseq<-data.frame(matrix(nrow=0,ncol=22))
 for (focal_OTU in rumen_sensitive_OTUs_prior){
     data_per_OTU<-rumen_list[[match(focal_OTU,rumen_list_index$X2)]]
     prior_comm_analysis<-comm_composition_df(OTU_table = rumen_otus,all_otu_names = rumen_otu_names,data_per_OTU = data_per_OTU,time=-1)
- 
   
     #convert to phyloseq object
     #1: OTU table (convert to numeric, add 1 to everything so DEseq can run)
@@ -718,8 +681,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
     phyloseq_taxonomy$Class<-substr(phyloseq_taxonomy$Class,4,nchar(phyloseq_taxonomy$Class))
     phyloseq_taxonomy$Order<-substr(phyloseq_taxonomy$Order,4,nchar(phyloseq_taxonomy$Order))
     phyloseq_taxonomy$Family<-substr(phyloseq_taxonomy$Family,4,nchar(phyloseq_taxonomy$Family))
-
-  phyloseq_taxonomy$Genus<-substr(phyloseq_taxonomy$Genus,4,nchar(phyloseq_taxonomy$Genus))
+    phyloseq_taxonomy$Genus<-substr(phyloseq_taxonomy$Genus,4,nchar(phyloseq_taxonomy$Genus))
     phyloseq_taxonomy$Species<-substr(phyloseq_taxonomy$Species,4,nchar(phyloseq_taxonomy$Species))
     rownames(phyloseq_taxonomy)<-taxa_names(phyloseq_otu_table)
     phyloseq_taxonomy<-tax_table(as.matrix(phyloseq_taxonomy))
@@ -755,7 +717,7 @@ for (focal_OTU in rumen_sensitive_OTUs_prior){
 }
                                  
 ##Compare relatedness of DESeq-identified pairs to 1000 iterations of random pairs in the cow rumen microbiome
-#How many DESeq-identified pairs come from the same family? (t=-1)
+#How many DESeq-identified pairs come from the same family, compared to randomly resampled OTUs? (t=0)
 colnames(summary_rumen_OTUs)[6:11]=c("Phylum","Class","Order","Family","Genus","Species")
 all_pairs_families<-combn(as.character(summary_rumen_OTUs$Family),2)
 rumen_perm_current<-permute_pairs(all_pairs_families,nrow(rumen_current_deseq),1000)
@@ -763,21 +725,19 @@ rumen_perm_current<-permute_pairs(all_pairs_families,nrow(rumen_current_deseq),1
 obs_means_neg<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange<0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange<0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
 print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
 print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
-
-                                 
+                             
 obs_means_pos<-nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="" & rumen_current_deseq$focal_Family==rumen_current_deseq$Family,])/nrow(rumen_current_deseq[rumen_current_deseq$log2FoldChange>0 & !is.na(rumen_current_deseq$focal_Family) & !is.na(rumen_current_deseq$Family) & substr(rumen_current_deseq$focal_Family,4,5)!="" & substr(rumen_current_deseq$Family,4,5)!="",])
 print(length(rumen_perm_current[rumen_perm_current<=obs_means_neg])/1000)
 print(length(rumen_perm_current[rumen_perm_current>=obs_means_neg])/1000)
 
-                                 
-#How many DESeq-identified pairs come from the same family? (t=-1)
+                               
+#How many DESeq-identified pairs come from the same family, compared to randomly resampled OTUs?? (t=-1)
 rumen_perm_prior<-permute_pairs(all_pairs_families,nrow(rumen_prior_deseq),1000)
                               
 obs_means_neg<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange<0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange<0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
 print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_neg])/1000)
 print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_neg])/1000)
-
-                                 
+                                
 obs_means_pos<-nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="" & rumen_prior_deseq$focal_Family==rumen_prior_deseq$Family,])/nrow(rumen_prior_deseq[rumen_prior_deseq$log2FoldChange>0 & !is.na(rumen_prior_deseq$focal_Family) & !is.na(rumen_prior_deseq$Family) & substr(rumen_prior_deseq$focal_Family,4,5)!="" & substr(rumen_prior_deseq$Family,4,5)!="",])
 print(length(rumen_perm_prior[rumen_perm_prior<=obs_means_pos])/1000)
 print(length(rumen_perm_prior[rumen_perm_prior>=obs_means_pos])/1000)
