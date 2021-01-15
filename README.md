@@ -10,8 +10,10 @@ Advances in next-generation sequencing have enabled the widespread measurement o
 R.D. was supported by a graduate fellowship from the National Science Foundation.
 
 # This repository includes:
+## Scripts_for_Edwards_Reanalysis.R
+This script contains all functions needed for the analysis of destructively sampled microbial communities, and shows how they were implemented on publicly available data from rice root endospheres to generate Figure 3C-D in the manuscript.
 ## Arrival and persistence analysis.R
-This script contains all functions needed for the analysis, and shows how they were implemented on temporal amplicon sequence data from human, mouse, and cattle intestinal microbiomes to generate Figure 3-4 in the manuscript.
+This script contains all functions needed for the analysis of repeatedly sampled microbial communities, and shows how they were implemented on publicly available data from human, mouse, and cattle intestinal microbiomes to generate Figure 3A-B and Figure 4 in the manuscript.
 ## OTU tables and taxonomy
 The files "humangut_otus.csv", "humangut_taxonomy.csv", "murine_otus.csv", "murine_taxonomy.csv", "rumen_otus.csv", "rumen_taxonomy.csv" were obtained from previously published work as described, and are provided here as used for the re-analysis.
 ## Summary tables
